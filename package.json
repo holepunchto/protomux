@@ -5,8 +5,11 @@
   "main": "index.js",
   "dependencies": {},
   "devDependencies": {
-    "brittle": "^1.6.0",
+    "brittle": "^2.0.1",
     "standard": "^16.0.4"
+  },
+  "scripts": {
+    "test": "standard && brittle test.js"
   },
   "repository": {
     "type": "git",

@@ -45,7 +45,7 @@ exports.handshake = {
     protocolArray.preencode(state, h.protocols)
   },
   encode (state, h) {
-    state.buffer[state.start++] = 0 // reversed flags
+    state.buffer[state.start++] = 0 // reserved flags
     protocolArray.encode(state, h.protocols)
   },
   decode (state) {

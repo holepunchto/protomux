@@ -107,37 +107,51 @@ test('multi message', function (t) {
   }
 })
 
-// test('corks', function (t) {
-//   const a = new Protomux(new SecretStream(true), [{
-//     name: 'other',
-//     messages: [c.bool, c.bool]
-//   }, {
-//     name: 'multi',
-//     messages: [c.int, c.string]
-//   }])
+test('corks', function (t) {
+  const a = new Protomux(new SecretStream(true), [{
+    name: 'other',
+    messages: [c.bool, c.bool]
+  }, {
+    name: 'multi',
+    messages: [c.int, c.string]
+  }])
 
-//   const b = new Protomux(new SecretStream(false), [{
-//     name: 'multi',
-//     messages: [c.int, c.string]
-//   }])
+  const b = new Protomux(new SecretStream(false), [{
+    name: 'multi',
+    messages: [c.int, c.string]
+  }])
 
-//   replicate(a, b)
+  replicate(a, b)
 
-//   t.plan(4)
+  t.plan(8 + 1)
 
-//   const ap = a.get('multi')
-//   const bp = b.get('multi')
+  const ap = a.get('multi')
+  const bp = b.get('multi')
 
-//   // ap.cork()
-//   // ap.send(0, 1)
-//   // ap.send(0, 2)
-//   // ap.send(0, 3)
-//   // ap.uncork()
+  const expected = [
+    [0, 1],
+    [0, 2],
+    [0, 3],
+    [1, 'a string']
+  ]
 
-//   bp.onmessage = function (type, message) {
-//     console.log(type, message)
-//   }
-// })
+  ap.cork()
+  ap.send(0, 1)
+  ap.send(0, 2)
+  ap.send(0, 3)
+  ap.send(1, 'a string')
+  ap.uncork()
+
+  b.stream.once('data', function (data) {
+    t.ok(expected.length === 0, 'received all messages in one data packet')
+  })
+
+  bp.onmessage = function (type, message) {
+    const e = expected.shift()
+    t.is(type, e[0])
+    t.is(message, e[1])
+  }
+})
 
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)

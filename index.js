@@ -34,6 +34,10 @@ class Protocol {
     const t = this.start + type
     const enc = this.encodings[type]
 
+    if (this.muxer._handshakeSent === false) {
+      this.muxer._sendHandshake()
+    }
+
     if (this.muxer.corked > 0) {
       this.muxer._batch.push({ type: t, encoding: enc, message })
       return false
@@ -44,7 +48,7 @@ class Protocol {
     c.uint.preencode(state, t)
     enc.preencode(state, message)
 
-    state.buffer = this.stream.alloc(state.end)
+    state.buffer = this.muxer._alloc(state.end)
 
     c.uint.encode(state, t)
     enc.encode(state, message)
@@ -74,21 +78,21 @@ module.exports = class Protomux {
 
     this._batch = null
     this._unmatchedProtocols = []
+    this._handshakeSent = false
+    this._alloc = opts.alloc || (typeof stream.alloc === 'function' ? stream.alloc.bind(stream) : Buffer.allocUnsafe)
 
     for (const p of protocols) this.addProtocol(p)
 
     this.stream.on('data', this._ondata.bind(this))
-
-    if (opts.cork) this.cork()
-    this._sendHandshake()
+    queueMicrotask(this._sendHandshake.bind(this))
   }
 
-  remoteOpened (name) {
-    for (const p of this.remoteProtocols) {
-      if (p.local.name === name) return true
+  remoteOpened (name, version) {
+    for (const { remote } of this.remoteProtocols) {
+      if (remote.name === name || (version === undefined || version.major === remote.version.major)) return true
     }
     for (const { remote } of this._unmatchedProtocols) {
-      if (remote.name === name) return true
+      if (remote.name === name || (version === undefined || version.major === remote.version.major)) return true
     }
     return false
   }
@@ -101,10 +105,10 @@ module.exports = class Protomux {
 
     for (let i = 0; i < this._unmatchedProtocols.length; i++) {
       const { start, remote } = this._unmatchedProtocols[i]
-      if (remote.name !== p.name || remote.version.major !== local.version.major) continue
+      if (remote.name !== local.name || remote.version.major !== local.version.major) continue
       local.remoteOpened = true
       this._unmatchedProtocols.splice(i, 1)
-      const end = start + Math.min(p.messages, local.messages)
+      const end = start + Math.min(remote.messages, local.messages)
       this.remoteProtocols.push({ local, remote, start, end })
       break
     }
@@ -113,22 +117,26 @@ module.exports = class Protomux {
   }
 
   removeProtocol (p) {
+    const { name, version = { major: 0, minor: 0 } } = typeof p === 'string' ? { name: p, version: undefined } : p
+
     for (let i = 0; i < this.protocols.length; i++) {
       const local = this.protocols[i]
-      if (local.name !== p.name || local.version.major !== p.version.major) continue
+      if (local.name !== name || local.version.major !== version.major) continue
       p.removed = true
       this.protocols.splice(i, 1)
     }
 
     for (let i = 0; i < this.remoteProtocols.length; i++) {
       const { local, remote, start } = this.remoteProtocols[i]
-      if (local.name !== p.name || local.version.major !== p.version.major) continue
+      if (local.name !== name || local.version.major !== version.major) continue
       this.remoteProtocols.splice(i, 1)
       this._unmatchedProtocols.push({ start, remote })
     }
   }
 
   addRemoteProtocol (p) {
+    if (!p.version) p = { name: p.name, version: { major: 0, minor: 0 }, messages: p.messages }
+
     const local = this.get(p.name)
     const start = this.remoteOffset
 
@@ -152,10 +160,10 @@ module.exports = class Protomux {
     local.onopen()
   }
 
-  removeRemoteProtocol (p) {
+  removeRemoteProtocol ({ name, version = { major: 0, minor: 0 } }) {
     for (let i = 0; i < this.remoteProtocols.length; i++) {
       const { local } = this.remoteProtocols[i]
-      if (local.name !== p.name || local.version.major !== p.version.major) continue
+      if (local.name !== name || local.version.major !== version.major) continue
       this.remoteProtocols.splice(i, 1)
       local.remoteOpened = false
       local.onclose()
@@ -164,17 +172,19 @@ module.exports = class Protomux {
 
     for (let i = 0; i < this._unmatchedProtocols.length; i++) {
       const { remote } = this._unmatchedProtocols[i]
-      if (remote.name !== p.name || remote.version.major !== p.version.major) continue
+      if (remote.name !== name || remote.version.major !== version.major) continue
       this._unmatchedProtocols.splice(i, 1)
       break
     }
   }
 
   _ondata (buffer) {
+    if (buffer.byteLength === 0) return // keep alive
+
     const state = { start: 0, end: buffer.byteLength, buffer }
 
     try {
-      this._recv(state, false)
+      this._recv(state)
     } catch (err) {
       this.destroy(err)
     }
@@ -195,7 +205,7 @@ module.exports = class Protomux {
     for (let i = 0; i < this.remoteProtocols.length; i++) {
       const p = this.remoteProtocols[i]
 
-      if (p.start <= t && t <= p.end) {
+      if (p.start <= t && t < p.end) {
         p.local.recv(t - p.start, state)
         break
       }
@@ -210,7 +220,7 @@ module.exports = class Protomux {
     while (state.start < state.end) {
       const len = c.uint.decode(state)
       state.end = state.start + len
-      this._recv(state, true)
+      this._recv(state)
       state.end = end
     }
   }
@@ -228,6 +238,7 @@ module.exports = class Protomux {
   }
 
   destroy (err) {
+    this._handshakeSent = true // just to avoid sending it again
     this.stream.destroy(err)
   }
 
@@ -260,7 +271,7 @@ module.exports = class Protomux {
       c.uint.preencode(state, lens[i] = (state.end - end))
     }
 
-    state.buffer = this.stream.alloc(state.end)
+    state.buffer = this._alloc(state.end)
     state.buffer[state.start++] = 0
 
     for (let i = 0; i < batch.length; i++) {
@@ -275,16 +286,19 @@ module.exports = class Protomux {
   }
 
   sendKeepAlive () {
-    this.stream.write(this.stream.alloc(0))
+    this.stream.write(this._alloc(0))
   }
 
   _sendHandshake () {
+    if (this._handshakeSent) return
+    this._handshakeSent = true
+
     const hs = {
       protocols: this.protocols
     }
 
     if (this.corked > 0) {
-      this._batch.push({ type: 0, encoding: m.handshake, message: hs })
+      this._batch.push({ type: 1, encoding: m.handshake, message: hs })
       return
     }
 
@@ -293,7 +307,7 @@ module.exports = class Protomux {
     c.uint.preencode(state, 1)
     m.handshake.preencode(state, hs)
 
-    state.buffer = this.stream.alloc(state.end)
+    state.buffer = this._alloc(state.end)
 
     c.uint.encode(state, 1)
     m.handshake.encode(state, hs)
