@@ -17,41 +17,25 @@ const version = {
   }
 }
 
-const protocol = {
+exports.addProtocol = {
   preencode (state, p) {
     c.string.preencode(state, p.name)
     version.preencode(state, p.version)
-    c.uint.preencode(state, p.messages)
+    c.uint.preencode(state, p.offset)
+    c.uint.preencode(state, p.length)
   },
   encode (state, p) {
     c.string.encode(state, p.name)
     version.encode(state, p.version)
-    c.uint.encode(state, p.messages)
+    c.uint.encode(state, p.offset)
+    c.uint.encode(state, p.length)
   },
   decode (state, p) {
     return {
       name: c.string.decode(state),
       version: version.decode(state),
-      messages: c.uint.decode(state)
-    }
-  }
-}
-
-const protocolArray = c.array(protocol)
-
-exports.handshake = {
-  preencode (state, h) {
-    state.end++ // reversed flags
-    protocolArray.preencode(state, h.protocols)
-  },
-  encode (state, h) {
-    state.buffer[state.start++] = 0 // reserved flags
-    protocolArray.encode(state, h.protocols)
-  },
-  decode (state) {
-    c.uint.decode(state) // not using any flags for now
-    return {
-      protocols: protocolArray.decode(state)
+      offset: c.uint.decode(state),
+      length: c.uint.decode(state)
     }
   }
 }

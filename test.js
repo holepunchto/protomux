@@ -4,40 +4,35 @@ const test = require('brittle')
 const c = require('compact-encoding')
 
 test('basic', function (t) {
-  const a = new Protomux(new SecretStream(true), [{
-    name: 'foo',
-    messages: [c.string]
-  }])
-
-  const b = new Protomux(new SecretStream(false), [{
-    name: 'foo',
-    messages: [c.string]
-  }])
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
 
   replicate(a, b)
 
-  const ap = a.get('foo')
-  const bp = b.get('foo')
+  a.addProtocol({
+    name: 'foo',
+    messages: [c.string],
+    onremoteopen () {
+      t.pass('a remote opened')
+    },
+    onmessage (type, message) {
+      t.is(type, 0)
+      t.is(message, 'hello world')
+    }
+  })
+
+  const bp = b.addProtocol({
+    name: 'foo',
+    messages: [c.string]
+  })
 
   t.plan(3)
-
-  ap.onopen = function () {
-    t.pass('a opened')
-  }
-
-  ap.onmessage = function (type, message) {
-    t.is(type, 0)
-    t.is(message, 'hello world')
-  }
 
   bp.send(0, 'hello world')
 })
 
 test('echo message', function (t) {
-  const a = new Protomux(new SecretStream(true), [{
-    name: 'foo',
-    messages: [c.string]
-  }])
+  const a = new Protomux(new SecretStream(true))
 
   const b = new Protomux(new SecretStream(false), [{
     name: 'other',
@@ -49,47 +44,59 @@ test('echo message', function (t) {
 
   replicate(a, b)
 
-  const ap = a.get('foo')
-  const bp = b.get('foo')
+  const ap = a.addProtocol({
+    name: 'foo',
+    messages: [c.string],
+    onmessage (type, message) {
+      ap.send(type, 'echo: ' + message)
+    }
+  })
+
+  b.addProtocol({
+    name: 'other',
+    messages: [c.bool, c.bool]
+  })
+
+  const bp = b.addProtocol({
+    name: 'foo',
+    messages: [c.string],
+    onremoteopen () {
+      t.pass('b remote opened')
+    },
+    onmessage (type, message) {
+      t.is(type, 0)
+      t.is(message, 'echo: hello world')
+    }
+  })
 
   t.plan(3)
 
-  ap.onmessage = function (type, message) {
-    ap.send(type, 'echo: ' + message)
-  }
-
   bp.send(0, 'hello world')
-
-  bp.onopen = function () {
-    t.pass('b opened')
-  }
-
-  bp.onmessage = function (type, message) {
-    t.is(type, 0)
-    t.is(message, 'echo: hello world')
-  }
 })
 
 test('multi message', function (t) {
-  const a = new Protomux(new SecretStream(true), [{
+  const a = new Protomux(new SecretStream(true))
+
+  a.addProtocol({
     name: 'other',
     messages: [c.bool, c.bool]
-  }, {
+  })
+
+  const ap = a.addProtocol({
     name: 'multi',
     messages: [c.int, c.string, c.string]
-  }])
+  })
 
-  const b = new Protomux(new SecretStream(false), [{
+  const b = new Protomux(new SecretStream(false))
+
+  const bp = b.addProtocol({
     name: 'multi',
     messages: [c.int, c.string]
-  }])
+  })
 
   replicate(a, b)
 
   t.plan(4)
-
-  const ap = a.get('multi')
-  const bp = b.get('multi')
 
   ap.send(0, 42)
   ap.send(1, 'a string with 42')
@@ -108,25 +115,30 @@ test('multi message', function (t) {
 })
 
 test('corks', function (t) {
-  const a = new Protomux(new SecretStream(true), [{
+  const a = new Protomux(new SecretStream(true))
+
+  a.cork()
+
+  a.addProtocol({
     name: 'other',
     messages: [c.bool, c.bool]
-  }, {
-    name: 'multi',
-    messages: [c.int, c.string]
-  }])
+  })
 
-  const b = new Protomux(new SecretStream(false), [{
+  const ap = a.addProtocol({
     name: 'multi',
     messages: [c.int, c.string]
-  }])
+  })
+
+  const b = new Protomux(new SecretStream(false))
+
+  const bp = b.addProtocol({
+    name: 'multi',
+    messages: [c.int, c.string]
+  })
 
   replicate(a, b)
 
   t.plan(8 + 1)
-
-  const ap = a.get('multi')
-  const bp = b.get('multi')
 
   const expected = [
     [0, 1],
@@ -135,12 +147,12 @@ test('corks', function (t) {
     [1, 'a string']
   ]
 
-  ap.cork()
   ap.send(0, 1)
   ap.send(0, 2)
   ap.send(0, 3)
   ap.send(1, 'a string')
-  ap.uncork()
+
+  a.uncork()
 
   b.stream.once('data', function (data) {
     t.ok(expected.length === 0, 'received all messages in one data packet')
