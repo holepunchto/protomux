@@ -107,6 +107,7 @@ module.exports = class Protomux {
     this.corked = 0
     this.backlog = backlog
     this.onacceptprotocol = onacceptprotocol || (() => this._unopened < this.backlog)
+    this.isProtomux = true
 
     this._unopened = 0
     this._batch = null
@@ -115,6 +116,10 @@ module.exports = class Protomux {
 
     this.stream.on('data', this._ondata.bind(this))
     this.stream.on('close', this._shutdown.bind(this))
+  }
+
+  static from (other, opts) {
+    return other.isProtomux === true ? other : new Protomux(other, opts)
   }
 
   sendKeepAlive () {

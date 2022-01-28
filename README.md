@@ -67,6 +67,10 @@ Options include:
 }
 ```
 
+#### `mux = Protomux.from(stream | muxer, [options])`
+
+Helper to accept either an existing muxer instance or a stream (which creates a new one).
+
 #### `const p = mux.addProtocol(opts)`
 
 Add a new protocol.
