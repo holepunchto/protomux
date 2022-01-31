@@ -8,12 +8,15 @@ const EMPTY = []
 class Protocol {
   constructor (mux) {
     this.mux = mux
+
     this.name = null
     this.version = null
     this.messages = EMPTY
+    this.context = null
     this.offset = 0
     this.length = 0
     this.opened = false
+    this.corked = false
 
     this.remoteVersion = null
     this.remoteOffset = 0
@@ -21,27 +24,47 @@ class Protocol {
     this.remoteOpened = false
     this.remoteClosed = false
 
-    this.onmessage = noop
     this.onremoteopen = noop
     this.onremoteclose = noop
   }
 
-  _attach ({ name, version = { major: 0, minor: 0 }, messages, onmessage = noop, onremoteopen = noop, onremoteclose = noop }) {
+  _attach ({ name, version = { major: 0, minor: 0 }, messages = 0, context = null, onremoteopen = noop, onremoteclose = noop }) {
     const opened = this.opened
 
     this.name = name
     this.version = version
-    this.messages = messages
+    this.messages = new Array(messages)
+    this.context = context
     this.offset = this.mux.offset
-    this.length = messages.length
+    this.length = messages
     this.opened = true
     this.corked = false
 
-    this.onmessage = onmessage
     this.onremoteopen = onremoteopen
     this.onremoteclose = onremoteclose
 
     return !opened
+  }
+
+  _nextMessage () {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i] === undefined && (i === 0 || this.messages[i - 1] !== undefined)) {
+        return i
+      }
+    }
+    return -1
+  }
+
+  addMessage ({ type = this._nextMessage(), encoding = c.binary, onmessage = noop } = {}) {
+    if (type < 0 || type >= this.messages.length) {
+      throw new Error('Invalid type, must be <= ' + this.messages.length)
+    }
+
+    const t = this.offset + type
+    const send = (message) => this.opened && this.mux._push(t, m.encoding, message)
+    const m = this.messages[type] = { encoding, onmessage, send }
+
+    return m
   }
 
   cork () {
@@ -56,15 +79,6 @@ class Protocol {
     this.mux.uncork()
   }
 
-  send (type, message) {
-    if (!this.opened) return false
-
-    const t = this.offset + type
-    const m = this.messages[type]
-
-    return this.mux._push(t, m, message)
-  }
-
   close () {
     if (this.opened === false) return
     this.opened = false
@@ -76,7 +90,7 @@ class Protocol {
     this.messages = EMPTY
     this.offset = 0
     this.length = 0
-    this.onmessage = this.onremoteopen = this.onremoteclose = noop
+    this.onremoteopen = this.onremoteclose = noop
     this.mux._push(2, c.uint, offset)
     this._gc()
 
@@ -92,9 +106,7 @@ class Protocol {
     if (type >= this.messages.length) return
 
     const m = this.messages[type]
-    const message = m.decode(state)
-
-    this.mux._catch(this.onmessage(type, message))
+    if (m !== undefined) this.mux._catch(m.onmessage(m.encoding.decode(state), this.context))
   }
 }
 
