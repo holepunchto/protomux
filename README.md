@@ -25,26 +25,37 @@ const cool = mux.addProtocol({
     major: 1,
     minor: 0
   },
-  // an array of compact encoders, each encoding/decoding the messages sent
-  messages: [
-    c.string,
-    c.bool
-  ],
+  messages: 2, // protocol has 2 messages
   onremoteopen () {
     console.log('the other side opened this protocol!')
   },
-  onemoteclose () {
+  onremoteclose () {
     console.log('the other side closed this protocol!')
-  },
-  onmessage (type, message) {
-    console.log('the other side sent a message', type, message)
   }
 })
 
-// And send some messages
+// And add some messages
 
-cool.send(0, 'a string')
-cool.send(1, true)
+const one = cool.addMessage({
+  type: 0,
+  encoding: c.string,
+  onmessage (m) {
+    console.log('recv message (1)', m)
+  }
+})
+
+const two = cool.addMessage({
+  type: 1,
+  encoding: c.bool,
+  onmessage (m) {
+    console.log('recv message (2)', m)
+  }
+})
+
+// And send some data
+
+one.send('a string')
+two.send(true)
 ```
 
 ## API
@@ -87,31 +98,50 @@ Options include:
     major: 0,
     minor: 0
   },
-  // Array of the message types you want to send/receive. Should be compact-encoders
-  messages: [
-    ...
-  ],
+  // Number of messages types you want to send/receive.
+  messages: 2,
   // Called when the remote side adds this protocol.
   // Errors here are caught and forwared to stream.destroy
   async onremoteopen () {},
   // Called when the remote side closes or rejects this protocol.
   // Errors here are caught and forwared to stream.destroy
-  async onremoteclose () {},
-  // Called when the remote sends a message
-  // Errors here are caught and forwared to stream.destroy
-  async onmessage (type, message) {}
+  async onremoteclose () {}
 }
 ```
 
 Each of the functions can also be set directly on the instance with the same name.
 
+#### `const m = p.addMessage(opts)`
+
+Specify a message. Options include:
+
+``` js
+{
+  // Defaults to an incrementing number
+  type: numericIndex,
+  // compact-encoding specifying how to encode/decode this message
+  encoding: c.binary,
+  // Called when the remote side sends a message.
+  // Errors here are caught and forwared to stream.destroy
+  async onmessage (message) { }
+}
+```
+
+#### `m.send(data)`
+
+Send a message.
+
+#### `m.onmessage`
+
+Function that is called when a message arrives.
+
+#### `m.encoding`
+
+The encoding for this message.
+
 #### `p.close()`
 
-Closes the protocol
-
-#### `p.send(type, message)`
-
-Send a message, type is the offset into the messages array.
+Closes the protocol.
 
 #### `p.cork()`
 
