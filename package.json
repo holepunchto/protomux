@@ -1,6 +1,6 @@
 {
   "name": "protomux",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Multiplex multiple message oriented protocols over a stream",
   "main": "index.js",
   "dependencies": {
