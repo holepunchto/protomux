@@ -9,10 +9,9 @@ test('basic', function (t) {
 
   replicate(a, b)
 
-  const p = a.addProtocol({
-    name: 'foo',
-    messages: 1,
-    onremoteopen () {
+  const p = a.open({
+    protocol: 'foo',
+    onopen () {
       t.pass('a remote opened')
     }
   })
@@ -24,9 +23,8 @@ test('basic', function (t) {
     }
   })
 
-  const bp = b.addProtocol({
-    name: 'foo',
-    messages: 1
+  const bp = b.open({
+    protocol: 'foo'
   })
 
   t.plan(2)
@@ -40,9 +38,8 @@ test('echo message', function (t) {
 
   replicate(a, b)
 
-  const ap = a.addProtocol({
-    name: 'foo',
-    messages: 1
+  const ap = a.open({
+    protocol: 'foo'
   })
 
   const aEcho = ap.addMessage({
@@ -52,15 +49,13 @@ test('echo message', function (t) {
     }
   })
 
-  b.addProtocol({
-    name: 'other',
-    messages: 2
+  b.open({
+    protocol: 'other'
   })
 
-  const bp = b.addProtocol({
-    name: 'foo',
-    messages: 1,
-    onremoteopen () {
+  const bp = b.open({
+    protocol: 'foo',
+    onopen () {
       t.pass('b remote opened')
     }
   })
@@ -80,14 +75,12 @@ test('echo message', function (t) {
 test('multi message', function (t) {
   const a = new Protomux(new SecretStream(true))
 
-  a.addProtocol({
-    name: 'other',
-    messages: 2
+  a.open({
+    protocol: 'other'
   })
 
-  const ap = a.addProtocol({
-    name: 'multi',
-    messages: 3
+  const ap = a.open({
+    protocol: 'multi'
   })
 
   const a1 = ap.addMessage({ encoding: c.int })
@@ -96,9 +89,8 @@ test('multi message', function (t) {
 
   const b = new Protomux(new SecretStream(false))
 
-  const bp = b.addProtocol({
-    name: 'multi',
-    messages: 2
+  const bp = b.open({
+    protocol: 'multi'
   })
 
   const b1 = bp.addMessage({ encoding: c.int })
@@ -131,14 +123,12 @@ test('corks', function (t) {
 
   a.cork()
 
-  a.addProtocol({
-    name: 'other',
-    messages: 2
+  a.open({
+    protocol: 'other'
   })
 
-  const ap = a.addProtocol({
-    name: 'multi',
-    messages: 2
+  const ap = a.open({
+    protocol: 'multi'
   })
 
   const a1 = ap.addMessage({ encoding: c.int })
@@ -146,9 +136,8 @@ test('corks', function (t) {
 
   const b = new Protomux(new SecretStream(false))
 
-  const bp = b.addProtocol({
-    name: 'multi',
-    messages: 2
+  const bp = b.open({
+    protocol: 'multi'
   })
 
   const b1 = bp.addMessage({ encoding: c.int })
