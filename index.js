@@ -81,7 +81,7 @@ class Session {
     const remote = this._mux._remote[this._remoteId - 1]
 
     this.opened = true
-    this._track(this.onopen())
+    this._track(this.onopen(this))
 
     remote.session = this
     if (remote.pending !== null) this._drain(remote)
@@ -123,7 +123,7 @@ class Session {
     this._localId = 0
 
     this._mux._gc(this._info)
-    this._track(this.onclose(isRemote))
+    this._track(this.onclose(isRemote, this))
 
     if (this._active === 0) this._destroy()
   }
@@ -131,7 +131,7 @@ class Session {
   _destroy () {
     if (this.destroyed === true) return
     this.destroyed = true
-    this._track(this.ondestroy())
+    this._track(this.ondestroy(this))
   }
 
   _recv (type, state) {
