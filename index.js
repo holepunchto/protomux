@@ -263,6 +263,10 @@ module.exports = class Protomux {
     return new this(stream, opts)
   }
 
+  static isProtomux (mux) {
+    return typeof mux === 'object' && mux.isProtomux === true
+  }
+
   * [Symbol.iterator] () {
     for (const session of this._local) {
       if (session !== null) yield session
