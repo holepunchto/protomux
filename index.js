@@ -606,6 +606,10 @@ module.exports = class Protomux {
     this.stream.write(buffer)
   }
 
+  destroy (err) {
+    this.stream.destroy(err)
+  }
+
   _safeDestroy (err) {
     safetyCatch(err)
     this.stream.destroy(err)
