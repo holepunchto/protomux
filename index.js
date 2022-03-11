@@ -4,7 +4,7 @@ const queueTick = require('queue-tick')
 const safetyCatch = require('safety-catch')
 
 const MAX_BUFFERED = 32768
-const MAX_BACKLOG = 256
+const MAX_BACKLOG = Infinity // TODO: impl "open" backpressure
 
 class Session {
   constructor (mux, info, context, protocol, id, messages, onopen, onclose, ondestroy) {
