@@ -7,10 +7,10 @@ const MAX_BUFFERED = 32768
 const MAX_BACKLOG = 256
 
 class Session {
-  constructor (mux, info, protocol, id, context, messages, onopen, onclose, ondestroy) {
+  constructor (mux, info, context, protocol, id, messages, onopen, onclose, ondestroy) {
+    this.context = context
     this.protocol = protocol
     this.id = id
-    this.context = context
     this.messages = []
     this.remoteMessages = this.messages
 
@@ -298,14 +298,14 @@ module.exports = class Protomux {
     return info ? info.opened > 0 : false
   }
 
-  open ({ protocol, id = null, context = null, unique = true, messages = [], onopen = noop, onclose = noop, ondestroy = noop }) {
+  open ({ context = null, protocol, id = null, unique = true, messages = [], onopen = noop, onclose = noop, ondestroy = noop }) {
     if (this.stream.destroyed) return null
 
     const info = this._get(protocol, id)
     if (unique && info.opened > 0) return null
 
     if (info.incoming.length === 0) {
-      const session = new Session(this, info, protocol, id, context, messages, onopen, onclose, ondestroy)
+      const session = new Session(this, info, context, protocol, id, messages, onopen, onclose, ondestroy)
       session._open()
       info.outgoing.push(session._localId)
       return session
@@ -317,7 +317,7 @@ module.exports = class Protomux {
     const r = this._remote[remoteId - 1]
     if (r === null) return null
 
-    const session = new Session(this, info, protocol, id, context, messages, onopen, onclose, ondestroy)
+    const session = new Session(this, info, context, protocol, id, messages, onopen, onclose, ondestroy)
 
     session._remoteId = remoteId
     session._open()
