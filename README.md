@@ -17,27 +17,22 @@ const c = require('compact-encoding')
 
 const mux = new Protomux(aStreamThatFrames)
 
-// Now add some protocols
+// Now add some protocol sessions
 
-const cool = mux.addProtocol({
-  name: 'cool-protocol',
-  version: {
-    major: 1,
-    minor: 0
-  },
-  messages: 2, // protocol has 2 messages
-  onremoteopen () {
+const cool = mux.open({
+  protocol: 'cool-protocol',
+  id: Buffer.from('optional binary id'),
+  onopen () {
     console.log('the other side opened this protocol!')
   },
-  onremoteclose () {
-    console.log('the other side closed this protocol!')
+  onclose () {
+    console.log('either side closed the protocol')
   }
 })
 
 // And add some messages
 
 const one = cool.addMessage({
-  type: 0,
   encoding: c.string,
   onmessage (m) {
     console.log('recv message (1)', m)
@@ -45,7 +40,6 @@ const one = cool.addMessage({
 })
 
 const two = cool.addMessage({
-  type: 1,
   encoding: c.bool,
   onmessage (m) {
     console.log('recv message (2)', m)
@@ -69,12 +63,7 @@ Options include:
 ``` js
 {
   // Called when the muxer wants to allocate a message that is written, defaults to Buffer.allocUnsafe.
-  alloc (size) {},
-  // Hook that is called when an unknown protocol is received. Should return true/false.
-  async onacceptprotocol ({ name, version }) {}
-  // How many protocols can be remote open, that we haven't opened yet?
-  // Only used if you don't provide an accept hook.
-  backlog: 128
+  alloc (size) {}
 }
 ```
 
@@ -82,43 +71,43 @@ Options include:
 
 Helper to accept either an existing muxer instance or a stream (which creates a new one).
 
-#### `const p = mux.addProtocol(opts)`
+#### `const session = mux.open(opts)`
 
-Add a new protocol.
+Add a new protocol session.
 
 Options include:
 
 ``` js
 {
   // Used to match the protocol
-  name: 'name of the protocol',
-  // You can have multiple versions of the same protocol on the same stream.
-  // Protocols are matched using the major version only.
-  version: {
-    major: 0,
-    minor: 0
-  },
-  // Number of messages types you want to send/receive.
-  messages: 2,
+  protocol: 'name of the protocol',
+  // Optional additional binary id to identify this session
+  id: buffer,
+  // Optional array of messages types you want to send/receive.
+  messages: [],
   // Called when the remote side adds this protocol.
   // Errors here are caught and forwared to stream.destroy
-  async onremoteopen () {},
-  // Called when the remote side closes or rejects this protocol.
+  async onopen () {},
+  // Called when the session closes - ie the remote side closes or rejects this protocol or we closed it.
   // Errors here are caught and forwared to stream.destroy
-  async onremoteclose () {}
+  async onclose () {},
+  // Called after onclose when all pending promises has resolved.
+  async ondestroy () {}
 }
 ```
 
-Each of the functions can also be set directly on the instance with the same name.
+Sessions are paired based on a queue, so the first remote session with the same `protocol` and `id`.
 
-#### `const m = p.addMessage(opts)`
+__NOTE__: `mux.open` returns `null` if the session should not be opened, ie it's a duplicate session or the remote has already closed this one.
 
-Specify a message. Options include:
+If you want multiple sessions with the same `protocol` and `id`, set `unique: false` as an option.
+
+#### `const m = session.addMessage(opts)`
+
+Add a message. Options include:
 
 ``` js
 {
-  // Defaults to an incrementing number
-  type: numericIndex,
   // compact-encoding specifying how to encode/decode this message
   encoding: c.binary,
   // Called when the remote side sends a message.
@@ -139,25 +128,25 @@ Function that is called when a message arrives.
 
 The encoding for this message.
 
-#### `p.close()`
+#### `session.close()`
 
-Closes the protocol.
+Closes the protocol session.
 
-#### `p.cork()`
+#### `sessoin.cork()`
 
-Corking the protocol, makes it buffer messages and send them all in a batch when it uncorks.
+Corking the protocol session, makes it buffer messages and send them all in a batch when it uncorks.
 
-#### `p.uncork()`
+#### `session.uncork()`
 
 Uncork and send the batch.
 
 #### `mux.cork()`
 
-Same as `p.cork` but on the muxer instance.
+Same as `session.cork` but on the muxer instance.
 
 #### `mux.uncork()`
 
-Same as `p.uncork` but on the muxer instance.
+Same as `session.uncork` but on the muxer instance.
 
 ## License
 
