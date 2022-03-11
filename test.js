@@ -9,12 +9,14 @@ test('basic', function (t) {
 
   replicate(a, b)
 
-  const p = a.open({
+  const p = a.createChannel({
     protocol: 'foo',
     onopen () {
       t.pass('a remote opened')
     }
   })
+
+  p.open()
 
   p.addMessage({
     encoding: c.string,
@@ -23,12 +25,13 @@ test('basic', function (t) {
     }
   })
 
-  const bp = b.open({
+  const bp = b.createChannel({
     protocol: 'foo'
   })
 
   t.plan(2)
 
+  bp.open()
   bp.addMessage({ encoding: c.string }).send('hello world')
 })
 
@@ -38,9 +41,11 @@ test('echo message', function (t) {
 
   replicate(a, b)
 
-  const ap = a.open({
+  const ap = a.createChannel({
     protocol: 'foo'
   })
+
+  ap.open()
 
   const aEcho = ap.addMessage({
     encoding: c.string,
@@ -49,16 +54,18 @@ test('echo message', function (t) {
     }
   })
 
-  b.open({
+  b.createChannel({
     protocol: 'other'
-  })
+  }).open()
 
-  const bp = b.open({
+  const bp = b.createChannel({
     protocol: 'foo',
     onopen () {
       t.pass('b remote opened')
     }
   })
+
+  bp.open()
 
   const bEcho = bp.addMessage({
     encoding: c.string,
@@ -75,13 +82,15 @@ test('echo message', function (t) {
 test('multi message', function (t) {
   const a = new Protomux(new SecretStream(true))
 
-  a.open({
+  a.createChannel({
     protocol: 'other'
-  })
+  }).open()
 
-  const ap = a.open({
+  const ap = a.createChannel({
     protocol: 'multi'
   })
+
+  ap.open()
 
   const a1 = ap.addMessage({ encoding: c.int })
   const a2 = ap.addMessage({ encoding: c.string })
@@ -89,9 +98,11 @@ test('multi message', function (t) {
 
   const b = new Protomux(new SecretStream(false))
 
-  const bp = b.open({
+  const bp = b.createChannel({
     protocol: 'multi'
   })
+
+  bp.open()
 
   const b1 = bp.addMessage({ encoding: c.int })
   const b2 = bp.addMessage({ encoding: c.string })
@@ -123,22 +134,26 @@ test('corks', function (t) {
 
   a.cork()
 
-  a.open({
+  a.createChannel({
     protocol: 'other'
-  })
+  }).open()
 
-  const ap = a.open({
+  const ap = a.createChannel({
     protocol: 'multi'
   })
+
+  ap.open()
 
   const a1 = ap.addMessage({ encoding: c.int })
   const a2 = ap.addMessage({ encoding: c.string })
 
   const b = new Protomux(new SecretStream(false))
 
-  const bp = b.open({
+  const bp = b.createChannel({
     protocol: 'multi'
   })
+
+  bp.open()
 
   const b1 = bp.addMessage({ encoding: c.int })
   const b2 = bp.addMessage({ encoding: c.string })
@@ -171,6 +186,82 @@ test('corks', function (t) {
 
   b2.onmessage = function (message) {
     t.is(message, expected.shift())
+  }
+})
+
+test('handshake', function (t) {
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const p = a.createChannel({
+    protocol: 'foo',
+    handshake: c.string,
+    onopen (handshake) {
+      t.is(handshake, 'b handshake')
+    }
+  })
+
+  p.open('a handshake')
+
+  const bp = b.createChannel({
+    protocol: 'foo',
+    handshake: c.string,
+    onopen (handshake) {
+      t.is(handshake, 'a handshake')
+    }
+  })
+
+  t.plan(2)
+
+  bp.open('b handshake')
+})
+
+test('rejections', function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let closed = 0
+  for (let i = 0; i < 10; i++) {
+    const p = a.createChannel({
+      protocol: 'foo#' + i,
+      onclose () {
+        closed++
+        if (closed === 10) t.pass('all closed')
+      }
+    })
+
+    p.open()
+  }
+})
+
+test('pipeline close and rejections', function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let closed = 0
+  for (let i = 0; i < 10; i++) {
+    const p = a.createChannel({
+      protocol: 'foo#' + i,
+      onclose () {
+        closed++
+        if (closed === 10) {
+          t.pass('all closed')
+        }
+      }
+    })
+
+    p.open()
+    p.close()
   }
 })
 

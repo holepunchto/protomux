@@ -17,9 +17,9 @@ const c = require('compact-encoding')
 
 const mux = new Protomux(aStreamThatFrames)
 
-// Now add some protocol sessions
+// Now add some protocol channels
 
-const cool = mux.open({
+const cool = mux.createChannel({
   protocol: 'cool-protocol',
   id: Buffer.from('optional binary id'),
   onopen () {
@@ -46,6 +46,11 @@ const two = cool.addMessage({
   }
 })
 
+// open the channels
+
+one.open()
+two.open()
+
 // And send some data
 
 one.send('a string')
@@ -71,9 +76,9 @@ Options include:
 
 Helper to accept either an existing muxer instance or a stream (which creates a new one).
 
-#### `const session = mux.open(opts)`
+#### `const channel = mux.createChannel(opts)`
 
-Add a new protocol session.
+Add a new protocol channel.
 
 Options include:
 
@@ -81,14 +86,16 @@ Options include:
 {
   // Used to match the protocol
   protocol: 'name of the protocol',
-  // Optional additional binary id to identify this session
+  // Optional additional binary id to identify this channel
   id: buffer,
+  // Optional encoding for a handshake
+  handshake: encoding,
   // Optional array of messages types you want to send/receive.
   messages: [],
   // Called when the remote side adds this protocol.
   // Errors here are caught and forwared to stream.destroy
-  async onopen () {},
-  // Called when the session closes - ie the remote side closes or rejects this protocol or we closed it.
+  async onopen (handshake) {},
+  // Called when the channel closes - ie the remote side closes or rejects this protocol or we closed it.
   // Errors here are caught and forwared to stream.destroy
   async onclose () {},
   // Called after onclose when all pending promises has resolved.
@@ -96,13 +103,17 @@ Options include:
 }
 ```
 
-Sessions are paired based on a queue, so the first remote session with the same `protocol` and `id`.
+Sessions are paired based on a queue, so the first remote channel with the same `protocol` and `id`.
 
-__NOTE__: `mux.open` returns `null` if the session should not be opened, ie it's a duplicate session or the remote has already closed this one.
+__NOTE__: `mux.createChannel` returns `null` if the channel should not be opened, ie it's a duplicate channel or the remote has already closed this one.
 
 If you want multiple sessions with the same `protocol` and `id`, set `unique: false` as an option.
 
-#### `const m = session.addMessage(opts)`
+#### `channel.open([handshake])`
+
+Open the channel.
+
+#### `const m = channel.addMessage(opts)`
 
 Add a message. Options include:
 
@@ -128,25 +139,25 @@ Function that is called when a message arrives.
 
 The encoding for this message.
 
-#### `session.close()`
+#### `channel.close()`
 
-Closes the protocol session.
+Closes the protocol channel.
 
-#### `sessoin.cork()`
+#### `channel.cork()`
 
-Corking the protocol session, makes it buffer messages and send them all in a batch when it uncorks.
+Corking the protocol channel, makes it buffer messages and send them all in a batch when it uncorks.
 
-#### `session.uncork()`
+#### `channel.uncork()`
 
 Uncork and send the batch.
 
 #### `mux.cork()`
 
-Same as `session.cork` but on the muxer instance.
+Same as `channel.cork` but on the muxer instance.
 
 #### `mux.uncork()`
 
-Same as `session.uncork` but on the muxer instance.
+Same as `channel.uncork` but on the muxer instance.
 
 ## License
 

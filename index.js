@@ -6,13 +6,13 @@ const safetyCatch = require('safety-catch')
 const MAX_BUFFERED = 32768
 const MAX_BACKLOG = Infinity // TODO: impl "open" backpressure
 
-class Session {
-  constructor (mux, info, context, protocol, id, messages, onopen, onclose, ondestroy) {
-    this.context = context
+class Channel {
+  constructor (mux, info, userData, protocol, id, handshake, messages, onopen, onclose, ondestroy) {
+    this.userData = userData
     this.protocol = protocol
     this.id = id
+    this.handshake = null
     this.messages = []
-    this.remoteMessages = this.messages
 
     this.opened = false
     this.closed = false
@@ -22,6 +22,7 @@ class Session {
     this.onclose = onclose
     this.ondestroy = ondestroy
 
+    this._handshake = handshake
     this._mux = mux
     this._info = info
     this._localId = 0
@@ -35,7 +36,7 @@ class Session {
     for (const m of messages) this.addMessage(m)
   }
 
-  _open () {
+  open (handshake) {
     const id = this._mux._free.length > 0
       ? this._mux._free.pop()
       : this._mux._local.push(null) - 1
@@ -44,19 +45,25 @@ class Session {
     this._localId = id + 1
     this._mux._local[id] = this
 
+    if (this._remoteId === 0) {
+      this._info.outgoing.push(this._localId)
+    }
+
     const state = { buffer: null, start: 2, end: 2 }
 
+    c.uint.preencode(state, this._localId)
     c.string.preencode(state, this.protocol)
     c.buffer.preencode(state, this.id)
-    c.uint.preencode(state, this._localId)
+    if (this._handshake) this._handshake.preencode(state, handshake)
 
     state.buffer = this._mux._alloc(state.end)
 
     state.buffer[0] = 0
     state.buffer[1] = 1
+    c.uint.encode(state, this._localId)
     c.string.encode(state, this.protocol)
     c.buffer.encode(state, this.id)
-    c.uint.encode(state, this._localId)
+    if (this._handshake) this._handshake.encode(state, handshake)
 
     this._mux._write0(state.buffer)
   }
@@ -81,9 +88,11 @@ class Session {
     const remote = this._mux._remote[this._remoteId - 1]
 
     this.opened = true
-    this._track(this.onopen(this))
+    this.handshake = this._handshake ? this._handshake.decode(remote.state) : null
+    this._track(this.onopen(this.handshake, this))
 
     remote.session = this
+    remote.state = null
     if (remote.pending !== null) this._drain(remote)
   }
 
@@ -135,8 +144,8 @@ class Session {
   }
 
   _recv (type, state) {
-    if (type < this.remoteMessages.length) {
-      this.remoteMessages[type].recv(state, this)
+    if (type < this.messages.length) {
+      this.messages[type].recv(state, this)
     }
   }
 
@@ -302,17 +311,14 @@ module.exports = class Protomux {
     return info ? info.opened > 0 : false
   }
 
-  open ({ context = null, protocol, id = null, unique = true, messages = [], onopen = noop, onclose = noop, ondestroy = noop }) {
+  createChannel ({ userData = null, protocol, id = null, unique = true, handshake = null, messages = [], onopen = noop, onclose = noop, ondestroy = noop }) {
     if (this.stream.destroyed) return null
 
     const info = this._get(protocol, id)
     if (unique && info.opened > 0) return null
 
     if (info.incoming.length === 0) {
-      const session = new Session(this, info, context, protocol, id, messages, onopen, onclose, ondestroy)
-      session._open()
-      info.outgoing.push(session._localId)
-      return session
+      return new Channel(this, info, userData, protocol, id, handshake, messages, onopen, onclose, ondestroy)
     }
 
     this._remoteBacklog--
@@ -321,10 +327,9 @@ module.exports = class Protomux {
     const r = this._remote[remoteId - 1]
     if (r === null) return null
 
-    const session = new Session(this, info, context, protocol, id, messages, onopen, onclose, ondestroy)
+    const session = new Channel(this, info, userData, protocol, id, handshake, messages, onopen, onclose, ondestroy)
 
     session._remoteId = remoteId
-    session._open()
     session._fullyOpenSoon()
 
     return session
@@ -465,9 +470,9 @@ module.exports = class Protomux {
   }
 
   _onopensession (state) {
+    const remoteId = c.uint.decode(state)
     const protocol = c.string.decode(state)
     const id = c.buffer.decode(state)
-    const remoteId = c.uint.decode(state)
 
     // remote tried to open the control session - auto reject for now
     // as we can use as an explicit control protocol declaration if we need to
@@ -497,14 +502,14 @@ module.exports = class Protomux {
         return
       }
 
-      this._remote[rid] = { pending: null, session: null }
+      this._remote[rid] = { state, pending: null, session: null }
 
       session._remoteId = remoteId
       session._fullyOpen()
       return
     }
 
-    this._remote[rid] = { pending: [], session: null }
+    this._remote[rid] = { state, pending: [], session: null }
 
     if (++this._remoteBacklog > MAX_BACKLOG) {
       throw new Error('Remote exceeded backlog')
@@ -517,19 +522,25 @@ module.exports = class Protomux {
   }
 
   _onrejectsession (state) {
-    const protocol = c.string.decode(state)
-    const id = c.buffer.decode(state)
-    const info = this._get(protocol, id)
+    const localId = c.uint.decode(state)
 
-    if (info.outgoing.length === 0) {
-      throw new Error('Invalid reject message')
+    // TODO: can be done smarter...
+    for (const info of this._infos.values()) {
+      const i = info.outgoing.indexOf(localId)
+      if (i === -1) continue
+
+      info.outgoing.splice(i, 1)
+
+      const session = this._local[localId - 1]
+
+      this._free.push(localId - 1)
+      if (session !== null) session._close(true)
+
+      this._gc(info)
+      return
     }
 
-    const localId = info.outgoing.shift()
-    const session = this._local[localId - 1]
-
-    this._free.push(localId - 1)
-    if (session !== null) session._close(true)
+    throw new Error('Invalid reject message')
   }
 
   _onclosesession (state) {
@@ -553,7 +564,7 @@ module.exports = class Protomux {
     if (--info.pairing > 0) return
 
     while (info.incoming.length > 0) {
-      this._rejectSession(info, info.incoming.pop())
+      this._rejectSession(info, info.incoming.shift())
     }
 
     this._gc(info)
@@ -575,15 +586,13 @@ module.exports = class Protomux {
 
     const state = { buffer: null, start: 2, end: 2 }
 
-    c.string.preencode(state, info.protocol)
-    c.buffer.preencode(state, info.id)
+    c.uint.preencode(state, remoteId)
 
     state.buffer = this._alloc(state.end)
 
     state.buffer[0] = 0
     state.buffer[1] = 2
-    c.string.encode(state, info.protocol)
-    c.buffer.encode(state, info.id)
+    c.uint.encode(state, remoteId)
 
     this._write0(state.buffer)
   }
