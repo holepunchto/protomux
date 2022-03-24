@@ -263,6 +263,7 @@ module.exports = class Protomux {
     this._notify = new Map()
 
     this.stream.on('data', this._ondata.bind(this))
+    this.stream.on('end', this._onend.bind(this))
     this.stream.on('error', noop) // we handle this in "close"
     this.stream.on('close', this._shutdown.bind(this))
   }
@@ -391,6 +392,10 @@ module.exports = class Protomux {
     } catch (err) {
       this._safeDestroy(err)
     }
+  }
+
+  _onend () { // TODO: support half open mode for the users who wants that here
+    this.stream.end()
   }
 
   _decode (remoteId, state) {
