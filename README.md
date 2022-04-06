@@ -159,6 +159,10 @@ Same as `channel.cork` but on the muxer instance.
 
 Same as `channel.uncork` but on the muxer instance.
 
+#### `for (const channel of muxer) { ... }`
+
+The muxer instance is iterable, so you can iterate over all the channels.
+
 ## License
 
 MIT
