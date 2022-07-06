@@ -2,6 +2,7 @@ const Protomux = require('./')
 const SecretStream = require('@hyperswarm/secret-stream')
 const test = require('brittle')
 const c = require('compact-encoding')
+const b4a = require('b4a')
 
 test('basic', function (t) {
   const a = new Protomux(new SecretStream(true))
@@ -186,6 +187,52 @@ test('corks', function (t) {
 
   b2.onmessage = function (message) {
     t.is(message, expected.shift())
+  }
+})
+
+test('mega cork', function (t) {
+  const a = new Protomux(new SecretStream(true))
+
+  a.cork()
+
+  const ap = a.createChannel({
+    protocol: 'mega'
+  })
+
+  ap.open()
+
+  const a1 = ap.addMessage({ encoding: c.buffer })
+
+  const b = new Protomux(new SecretStream(false))
+
+  const bp = b.createChannel({
+    protocol: 'mega'
+  })
+
+  bp.open()
+
+  const b1 = bp.addMessage({ encoding: c.buffer })
+
+  replicate(a, b)
+
+  t.plan(32 + 4)
+
+  const buf = b4a.alloc(1024 * 1024)
+  const expected = []
+
+  for (let i = 0; i < 32; i++) {
+    a1.send(buf)
+    expected.push(buf)
+  }
+
+  a.uncork()
+
+  b.stream.on('data', function (data) {
+    t.ok(data.byteLength > 8000000, 'got big message')
+  })
+
+  b1.onmessage = function (message) {
+    t.alike(message, expected.shift())
   }
 })
 

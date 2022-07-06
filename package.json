@@ -10,7 +10,7 @@
     "safety-catch": "^1.0.1"
   },
   "devDependencies": {
-    "@hyperswarm/secret-stream": "^5.1.4",
+    "@hyperswarm/secret-stream": "^6.0.0",
     "brittle": "^2.0.1",
     "standard": "^16.0.4"
   },

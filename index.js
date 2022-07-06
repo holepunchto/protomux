@@ -5,6 +5,7 @@ const safetyCatch = require('safety-catch')
 
 const MAX_BUFFERED = 32768
 const MAX_BACKLOG = Infinity // TODO: impl "open" backpressure
+const MAX_BATCH = 8 * 1024 * 1024
 
 class Channel {
   constructor (mux, info, userData, protocol, id, handshake, messages, onopen, onclose, ondestroy) {
@@ -337,6 +338,12 @@ module.exports = class Protomux {
   }
 
   _pushBatch (localId, buffer) {
+    if (this._batchState.end >= MAX_BATCH) {
+      this._sendBatch(this._batch, this._batchState)
+      this._batch = []
+      this._batchState = { buffer: null, start: 0, end: 1 }
+    }
+
     if (this._batch.length === 0 || this._batch[this._batch.length - 1].localId !== localId) {
       this._batchState.end++
       c.uint.preencode(this._batchState, localId)
