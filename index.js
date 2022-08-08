@@ -382,10 +382,15 @@ module.exports = class Protomux {
     let info = this._infos.get(key)
     if (info) return info
 
-    info = { key, protocol, id, pairing: 0, opened: 0, incoming: [], outgoing: [] }
+    info = { key, protocol, aliases: [], id, pairing: 0, opened: 0, incoming: [], outgoing: [] }
     this._infos.set(key, info)
 
-    for (const alias of aliases) this._infos.set(toKey(alias, id), info)
+    for (const alias of aliases) {
+      const key = toKey(alias, id)
+      info.aliases.push(key)
+
+      this._infos.set(key, info)
+    }
 
     return info
   }
@@ -393,6 +398,8 @@ module.exports = class Protomux {
   _gc (info) {
     if (info.opened === 0 && info.outgoing.length === 0 && info.incoming.length === 0) {
       this._infos.delete(info.key)
+
+      for (const alias of info.aliases) this._infos.delete(alias)
     }
   }
 
