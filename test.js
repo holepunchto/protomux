@@ -312,6 +312,39 @@ test('pipeline close and rejections', function (t) {
   }
 })
 
+test('alias', function (t) {
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const p = a.createChannel({
+    protocol: 'foo',
+    aliases: ['bar'],
+    onopen () {
+      t.pass('a remote opened')
+    }
+  })
+
+  p.open()
+
+  p.addMessage({
+    encoding: c.string,
+    onmessage (message) {
+      t.is(message, 'hello world')
+    }
+  })
+
+  const bp = b.createChannel({
+    protocol: 'bar'
+  })
+
+  t.plan(2)
+
+  bp.open()
+  bp.addMessage({ encoding: c.string }).send('hello world')
+})
+
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
