@@ -8,9 +8,10 @@ const MAX_BACKLOG = Infinity // TODO: impl "open" backpressure
 const MAX_BATCH = 8 * 1024 * 1024
 
 class Channel {
-  constructor (mux, info, userData, protocol, id, handshake, messages, onopen, onclose, ondestroy) {
+  constructor (mux, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy) {
     this.userData = userData
     this.protocol = protocol
+    this.aliases = aliases
     this.id = id
     this.handshake = null
     this.messages = []
@@ -313,14 +314,14 @@ module.exports = class Protomux {
     return info ? info.opened > 0 : false
   }
 
-  createChannel ({ userData = null, protocol, id = null, unique = true, handshake = null, messages = [], onopen = noop, onclose = noop, ondestroy = noop }) {
+  createChannel ({ userData = null, protocol, aliases = [], id = null, unique = true, handshake = null, messages = [], onopen = noop, onclose = noop, ondestroy = noop }) {
     if (this.stream.destroyed) return null
 
-    const info = this._get(protocol, id)
+    const info = this._get(protocol, id, aliases)
     if (unique && info.opened > 0) return null
 
     if (info.incoming.length === 0) {
-      return new Channel(this, info, userData, protocol, id, handshake, messages, onopen, onclose, ondestroy)
+      return new Channel(this, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy)
     }
 
     this._remoteBacklog--
@@ -329,7 +330,7 @@ module.exports = class Protomux {
     const r = this._remote[remoteId - 1]
     if (r === null) return null
 
-    const session = new Channel(this, info, userData, protocol, id, handshake, messages, onopen, onclose, ondestroy)
+    const session = new Channel(this, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy)
 
     session._remoteId = remoteId
     session._fullyOpenSoon()
@@ -375,20 +376,30 @@ module.exports = class Protomux {
     this.stream.write(state.buffer)
   }
 
-  _get (protocol, id) {
+  _get (protocol, id, aliases = []) {
     const key = toKey(protocol, id)
 
     let info = this._infos.get(key)
     if (info) return info
 
-    info = { key, protocol, id, pairing: 0, opened: 0, incoming: [], outgoing: [] }
+    info = { key, protocol, aliases: [], id, pairing: 0, opened: 0, incoming: [], outgoing: [] }
     this._infos.set(key, info)
+
+    for (const alias of aliases) {
+      const key = toKey(alias, id)
+      info.aliases.push(key)
+
+      this._infos.set(key, info)
+    }
+
     return info
   }
 
   _gc (info) {
     if (info.opened === 0 && info.outgoing.length === 0 && info.incoming.length === 0) {
       this._infos.delete(info.key)
+
+      for (const alias of info.aliases) this._infos.delete(alias)
     }
   }
 
