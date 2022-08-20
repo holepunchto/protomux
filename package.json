@@ -1,6 +1,6 @@
 {
   "name": "protomux",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "description": "Multiplex multiple message oriented protocols over a stream",
   "main": "index.js",
   "dependencies": {
@@ -10,8 +10,8 @@
     "safety-catch": "^1.0.1"
   },
   "devDependencies": {
-    "@hyperswarm/secret-stream": "^5.1.4",
-    "brittle": "^2.0.1",
+    "@hyperswarm/secret-stream": "^6.0.0",
+    "brittle": "^3.0.0",
     "standard": "^16.0.4"
   },
   "scripts": {
