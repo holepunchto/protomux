@@ -345,6 +345,52 @@ test('alias', function (t) {
   bp.addMessage({ encoding: c.string }).send('hello world')
 })
 
+test('deduplicate muxers', function (t) {
+  const sa = new SecretStream(true)
+  const sb = new SecretStream(false)
+
+  replicate({ stream: sa }, { stream: sb })
+
+  const a = Protomux.from(sa)
+  const foo = a.createChannel({
+    protocol: 'foo',
+    onopen () { t.pass('a remote opened') }
+  })
+
+  foo.open()
+
+  foo.addMessage({
+    encoding: c.string,
+    onmessage (message) { t.is(message, 'hello foo') }
+  })
+
+  const bfoo = Protomux.from(sb).createChannel({ protocol: 'foo' })
+
+  // Another Protomux instance for another protocol
+  const a2 = Protomux.from(sa)
+  const bar = a2.createChannel({
+    protocol: 'bar',
+    onopen () { t.pass('a remote opened') }
+  })
+
+  bar.open()
+
+  bar.addMessage({
+    encoding: c.string,
+    onmessage (message) { t.is(message, 'hello bar') }
+  })
+
+  const bbar = Protomux.from(sb).createChannel({ protocol: 'bar' })
+
+  t.plan(4)
+
+  bfoo.open()
+  bfoo.addMessage({ encoding: c.string }).send('hello foo')
+
+  bbar.open()
+  bbar.addMessage({ encoding: c.string }).send('hello bar')
+})
+
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }

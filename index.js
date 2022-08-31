@@ -245,6 +245,8 @@ class Channel {
 
 module.exports = class Protomux {
   constructor (stream, { alloc } = {}) {
+    if (stream.userData === null) stream.userData = this
+
     this.isProtomux = true
     this.stream = stream
     this.corked = 0
@@ -271,6 +273,7 @@ module.exports = class Protomux {
   }
 
   static from (stream, opts) {
+    if (stream.userData && stream.userData.isProtomux) return stream.userData
     if (stream.isProtomux) return stream
     return new this(stream, opts)
   }
