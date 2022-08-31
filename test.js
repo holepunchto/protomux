@@ -351,7 +351,7 @@ test('deduplicate muxers', function (t) {
 
   replicate({ stream: sa }, { stream: sb })
 
-  const a = new Protomux(sa)
+  const a = Protomux.from(sa)
   const foo = a.createChannel({
     protocol: 'foo',
     onopen () { t.pass('a remote opened') }
@@ -364,10 +364,10 @@ test('deduplicate muxers', function (t) {
     onmessage (message) { t.is(message, 'hello foo') }
   })
 
-  const bfoo = new Protomux(sb).createChannel({ protocol: 'foo' })
+  const bfoo = Protomux.from(sb).createChannel({ protocol: 'foo' })
 
   // Another Protomux instance for another protocol
-  const a2 = new Protomux(sa)
+  const a2 = Protomux.from(sa)
   const bar = a2.createChannel({
     protocol: 'bar',
     onopen () { t.pass('a remote opened') }
@@ -380,7 +380,7 @@ test('deduplicate muxers', function (t) {
     onmessage (message) { t.is(message, 'hello bar') }
   })
 
-  const bbar = new Protomux(sb).createChannel({ protocol: 'bar' })
+  const bbar = Protomux.from(sb).createChannel({ protocol: 'bar' })
 
   t.plan(4)
 
