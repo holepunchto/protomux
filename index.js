@@ -180,6 +180,7 @@ class Channel {
     if (!opts) return this._skipMessage()
 
     const type = this.messages.length
+    const name = opts.name || null
     const encoding = opts.encoding || c.raw
     const onmessage = opts.onmessage || noop
 
@@ -188,6 +189,7 @@ class Channel {
 
     const m = {
       type,
+      name,
       encoding,
       onmessage,
       recv (state, session) {
@@ -224,6 +226,7 @@ class Channel {
     }
 
     this.messages.push(m)
+    if (name) this.messages[name] = m
 
     return m
   }
@@ -232,6 +235,7 @@ class Channel {
     const type = this.messages.length
     const m = {
       type,
+      name: null,
       encoding: c.raw,
       onmessage: noop,
       recv (state, session) {},
