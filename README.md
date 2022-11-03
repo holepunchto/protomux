@@ -46,10 +46,9 @@ const two = cool.addMessage({
   }
 })
 
-// open the channels
+// open the channel
 
-one.open()
-two.open()
+cool.open()
 
 // And send some data
 
