@@ -392,7 +392,7 @@ test('deduplicate muxers', function (t) {
 })
 
 test('open + send + close on same tick', async function (t) {
-  t.plan(5)
+  t.plan(4)
 
   const a = new Protomux(new SecretStream(true))
   const b = new Protomux(new SecretStream(false))
@@ -418,7 +418,7 @@ test('open + send + close on same tick', async function (t) {
   const bc = b.createChannel({
     protocol: 'foo',
     onopen () {
-      t.pass('b opened')
+      t.fail('b opened')
     },
     onclose () {
       t.pass('b closed')
