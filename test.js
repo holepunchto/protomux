@@ -411,7 +411,6 @@ test('open + send + close on same tick', async function (t) {
 
   ac.open()
   ac.addMessage({ encoding: c.string, onmessage: (message) => t.is(message, 'hello') })
-  // ac.close()
 
   const bc = b.createChannel({
     protocol: 'foo',
@@ -424,7 +423,9 @@ test('open + send + close on same tick', async function (t) {
   })
 
   bc.open()
-  ac.addMessage({ encoding: c.string }).send('hello')
+  bc.addMessage({ encoding: c.string }).send('hello')
+
+  ac.close()
   bc.close()
 })
 
