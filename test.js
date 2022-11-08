@@ -392,7 +392,7 @@ test('deduplicate muxers', function (t) {
 })
 
 test('open + send + close on same tick', async function (t) {
-  t.plan(4)
+  t.plan(5)
 
   const a = new Protomux(new SecretStream(true))
   const b = new Protomux(new SecretStream(false))
@@ -410,7 +410,10 @@ test('open + send + close on same tick', async function (t) {
   })
 
   ac.open()
-  ac.addMessage({ encoding: c.string, onmessage: (message) => t.is(message, 'hello') })
+  ac.addMessage({
+    encoding: c.string,
+    onmessage (message) { t.is(message, 'hello') }
+  })
 
   const bc = b.createChannel({
     protocol: 'foo',
@@ -424,8 +427,6 @@ test('open + send + close on same tick', async function (t) {
 
   bc.open()
   bc.addMessage({ encoding: c.string }).send('hello')
-
-  ac.close()
   bc.close()
 })
 
