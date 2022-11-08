@@ -391,6 +391,45 @@ test('deduplicate muxers', function (t) {
   bbar.addMessage({ encoding: c.string }).send('hello bar')
 })
 
+test('open + send + close on same tick', async function (t) {
+  t.plan(4)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const ac = a.createChannel({
+    protocol: 'foo',
+    onopen () {
+      t.pass('a opened')
+    },
+    onclose () {
+      t.pass('a closed')
+    }
+  })
+
+  ac.open()
+  ac.addMessage({
+    encoding: c.string,
+    onmessage (message) { t.is(message, 'hello') }
+  })
+
+  const bc = b.createChannel({
+    protocol: 'foo',
+    onopen () {
+      t.fail('b opened')
+    },
+    onclose () {
+      t.pass('b closed')
+    }
+  })
+
+  bc.open()
+  bc.addMessage({ encoding: c.string }).send('hello')
+  bc.close()
+})
+
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
