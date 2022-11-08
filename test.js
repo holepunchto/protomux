@@ -391,7 +391,7 @@ test('deduplicate muxers', function (t) {
   bbar.addMessage({ encoding: c.string }).send('hello bar')
 })
 
-test.solo('open + send + close on same tick', async function (t) {
+test('open + send + close on same tick', async function (t) {
   t.plan(4)
 
   const a = new Protomux(new SecretStream(true))
