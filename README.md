@@ -108,13 +108,21 @@ __NOTE__: `mux.createChannel` returns `null` if the channel should not be opened
 
 If you want multiple sessions with the same `protocol` and `id`, set `unique: false` as an option.
 
+#### `mux.opened({ protocol: 'name of the protocol' })`
+
+Returns boolean.
+
+#### `mux.pair({ protocol: 'name of the protocol' }, cb)`
+
+Calls a callback when paired.
+
 #### `channel.open([handshake])`
 
 Open the channel.
 
 #### `const m = channel.addMessage(opts)`
 
-Add a message. Options include:
+Add/register a message type for a certain encoding. Options include:
 
 ``` js
 {
