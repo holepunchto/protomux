@@ -12,13 +12,11 @@ npm install protomux
 const Protomux = require('protomux')
 const c = require('compact-encoding')
 
-// By framed stream, it has be a stream that preserves the messages, ie something that length prefixes
-// like @hyperswarm/secret-stream
-
+// It has to be a stream that preserves the messages
+// ie something that length prefixes like @hyperswarm/secret-stream
 const mux = new Protomux(aStreamThatFrames)
 
 // Now add some protocol channels
-
 const cool = mux.createChannel({
   protocol: 'cool-protocol',
   id: Buffer.from('optional binary id'),
@@ -27,33 +25,27 @@ const cool = mux.createChannel({
   },
   onclose () {
     console.log('either side closed the protocol')
-  }
+  },
+  messages: [
+    { encoding: c.string, onmessage: onfirst },
+    { encoding: c.string, onmessage: onsecond }
+  ]
 })
 
-// And add some messages
+function onfirst (msg, channel) {
+  console.log('recv message (0)', msg)
+}
 
-const one = cool.addMessage({
-  encoding: c.string,
-  onmessage (m) {
-    console.log('recv message (1)', m)
-  }
-})
-
-const two = cool.addMessage({
-  encoding: c.bool,
-  onmessage (m) {
-    console.log('recv message (2)', m)
-  }
-})
+function onsecond (msg, channel) {
+  console.log('recv message (1)', msg)
+}
 
 // open the channel
-
 cool.open()
 
 // And send some data
-
-one.send('a string')
-two.send(true)
+cool.messages[0].send('a string')
+cool.messages[1].send(true)
 ```
 
 ## API
@@ -122,7 +114,7 @@ Add a message. Options include:
   encoding: c.binary,
   // Called when the remote side sends a message.
   // Errors here are caught and forwared to stream.destroy
-  async onmessage (message) { }
+  async onmessage (message, channel) { }
 }
 ```
 
