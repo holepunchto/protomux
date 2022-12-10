@@ -28,7 +28,7 @@ const cool = mux.createChannel({
   },
   messages: [
     { encoding: c.string, onmessage: onfirst },
-    { encoding: c.string, onmessage: onsecond }
+    { encoding: c.bool, onmessage: onsecond }
   ]
 })
 
