@@ -489,8 +489,9 @@ module.exports = class Protomux {
         remoteId = c.uint.decode(state)
         continue
       }
-      state.end = state.start + end
+      state.end = state.start + len
       this._decode(remoteId, state)
+      state.start = state.end
       state.end = end
     }
   }
@@ -535,7 +536,8 @@ module.exports = class Protomux {
       return
     }
 
-    this._remote[rid] = { state, pending: [], session: null }
+    const copyState = { buffer: state.buffer, start: state.start, end: state.end }
+    this._remote[rid] = { state: copyState, pending: [], session: null }
 
     if (++this._remoteBacklog > MAX_BACKLOG) {
       throw new Error('Remote exceeded backlog')
