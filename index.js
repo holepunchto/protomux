@@ -253,6 +253,7 @@ module.exports = class Protomux {
     this.isProtomux = true
     this.stream = stream
     this.corked = 0
+    this.drained = true
 
     this._alloc = alloc || (typeof stream.alloc === 'function' ? stream.alloc.bind(stream) : b4a.allocUnsafe)
     this._safeDestroyBound = this._safeDestroy.bind(this)

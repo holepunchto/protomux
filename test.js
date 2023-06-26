@@ -431,10 +431,12 @@ test('open + send + close on same tick', async function (t) {
 })
 
 test('drain', function (t) {
-  t.plan(2)
+  t.plan(3)
 
   const mux1 = new Protomux(new SecretStream(true))
   const mux2 = new Protomux(new SecretStream(false))
+
+  t.ok(mux2.drained)
 
   replicate(mux1, mux2)
 
