@@ -8,7 +8,7 @@ const MAX_BACKLOG = Infinity // TODO: impl "open" backpressure
 const MAX_BATCH = 8 * 1024 * 1024
 
 class Channel {
-  constructor (mux, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy) {
+  constructor (mux, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy, ondrain) {
     this.userData = userData
     this.protocol = protocol
     this.aliases = aliases
@@ -23,6 +23,7 @@ class Channel {
     this.onopen = onopen
     this.onclose = onclose
     this.ondestroy = ondestroy
+    this.ondrain = ondrain
 
     this._handshake = handshake
     this._mux = mux
@@ -219,7 +220,9 @@ class Channel {
         c.uint.encode(state, type)
         encoding.encode(state, m)
 
-        return mux.stream.write(state.buffer)
+        mux.drained = mux.stream.write(state.buffer)
+
+        return mux.drained
       }
     }
 
@@ -267,6 +270,7 @@ module.exports = class Protomux {
     this._notify = new Map()
 
     this.stream.on('data', this._ondata.bind(this))
+    this.stream.on('drain', this._ondrain.bind(this))
     this.stream.on('end', this._onend.bind(this))
     this.stream.on('error', noop) // we handle this in "close"
     this.stream.on('close', this._shutdown.bind(this))
@@ -317,14 +321,14 @@ module.exports = class Protomux {
     return info ? info.opened > 0 : false
   }
 
-  createChannel ({ userData = null, protocol, aliases = [], id = null, unique = true, handshake = null, messages = [], onopen = noop, onclose = noop, ondestroy = noop }) {
+  createChannel ({ userData = null, protocol, aliases = [], id = null, unique = true, handshake = null, messages = [], onopen = noop, onclose = noop, ondestroy = noop, ondrain = noop }) {
     if (this.stream.destroyed) return null
 
     const info = this._get(protocol, id, aliases)
     if (unique && info.opened > 0) return null
 
     if (info.incoming.length === 0) {
-      return new Channel(this, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy)
+      return new Channel(this, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy, ondrain)
     }
 
     this._remoteBacklog--
@@ -333,7 +337,7 @@ module.exports = class Protomux {
     const r = this._remote[remoteId - 1]
     if (r === null) return null
 
-    const session = new Channel(this, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy)
+    const session = new Channel(this, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy, ondrain)
 
     session._remoteId = remoteId
     session._fullyOpenSoon()
@@ -376,7 +380,7 @@ module.exports = class Protomux {
       c.buffer.encode(state, b.buffer)
     }
 
-    this.stream.write(state.buffer)
+    this.drained = this.stream.write(state.buffer)
   }
 
   _get (protocol, id, aliases = []) {
@@ -412,6 +416,14 @@ module.exports = class Protomux {
       this._decode(c.uint.decode(state), state)
     } catch (err) {
       this._safeDestroy(err)
+    }
+  }
+
+  _ondrain () {
+    this.drained = true
+
+    for (const s of this._local) {
+      if (s !== null) s._track(s.ondrain(this))
     }
   }
 
@@ -631,7 +643,7 @@ module.exports = class Protomux {
       return
     }
 
-    this.stream.write(buffer)
+    this.drained = this.stream.write(buffer)
   }
 
   destroy (err) {
