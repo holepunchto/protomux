@@ -431,7 +431,7 @@ test('open + send + close on same tick', async function (t) {
 })
 
 test('drain', function (t) {
-  t.plan(6)
+  t.plan(7)
 
   const mux1 = new Protomux(new SecretStream(true))
   const mux2 = new Protomux(new SecretStream(false))
@@ -457,7 +457,8 @@ test('drain', function (t) {
     messages: [
       { encoding: c.string }
     ],
-    ondrain () {
+    ondrain (c) {
+      t.is(c, b)
       t.ok(mux1.drained)
     }
   })

@@ -428,7 +428,7 @@ module.exports = class Protomux {
     this.drained = true
 
     for (const s of this._local) {
-      if (s !== null) s._track(s.ondrain(this))
+      if (s !== null) s._track(s.ondrain(s))
     }
   }
 
