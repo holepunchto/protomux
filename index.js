@@ -39,6 +39,10 @@ class Channel {
     for (const m of messages) this.addMessage(m)
   }
 
+  get drained () {
+    return this._mux.drained
+  }
+
   open (handshake) {
     const id = this._mux._free.length > 0
       ? this._mux._free.pop()

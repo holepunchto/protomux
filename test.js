@@ -431,11 +431,12 @@ test('open + send + close on same tick', async function (t) {
 })
 
 test('drain', function (t) {
-  t.plan(3)
+  t.plan(6)
 
   const mux1 = new Protomux(new SecretStream(true))
   const mux2 = new Protomux(new SecretStream(false))
 
+  t.ok(mux1.drained)
   t.ok(mux2.drained)
 
   replicate(mux1, mux2)
@@ -446,6 +447,8 @@ test('drain', function (t) {
       { encoding: c.string }
     ]
   })
+
+  t.ok(a.drained)
 
   a.open()
 
@@ -459,11 +462,14 @@ test('drain', function (t) {
     }
   })
 
+  t.ok(b.drained)
+
   b.open()
 
   while (true) {
     const drained = b.messages[0].send('hello world')
-    if (mux2.drained !== drained) t.fail('Drained property should be equal')
+    if (b.drained !== drained) t.fail('Drained property should be equal as in channel')
+    if (mux2.drained !== drained) t.fail('Drained property should be equal as in mux')
 
     if (!drained) {
       t.pass()
