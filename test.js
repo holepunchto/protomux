@@ -479,6 +479,22 @@ test('drain', function (t) {
   }
 })
 
+test('keep alive - one side only', function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  a.stream.on('error', (err) => t.fail(err.message))
+  b.stream.on('error', (err) => t.fail(err.message))
+
+  a.stream.setKeepAlive(1)
+
+  replicate(a, b)
+
+  setTimeout(() => t.pass(), 500)
+})
+
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
