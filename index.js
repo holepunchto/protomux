@@ -107,7 +107,7 @@ class Channel {
     for (let i = 0; i < remote.pending.length; i++) {
       const p = remote.pending[i]
       this._mux._buffered -= byteSize(p.state)
-      this._recv(p.type, p.state, i === remote.pending.length - 1)
+      this._recv(p.type, p.state, p.last)
     }
 
     remote.pending = null
@@ -451,7 +451,7 @@ module.exports = class Protomux {
     if (r === null) return
 
     if (r.pending !== null) {
-      this._bufferMessage(r, type, state)
+      this._bufferMessage(r, type, state, last)
       return
     }
 
@@ -478,9 +478,9 @@ module.exports = class Protomux {
     }
   }
 
-  _bufferMessage (r, type, { buffer, start, end }) {
+  _bufferMessage (r, type, { buffer, start, end }, last) {
     const state = { buffer, start, end } // copy
-    r.pending.push({ type, state })
+    r.pending.push({ type, state, last })
     this._buffered += byteSize(state)
     this._pauseMaybe()
   }
