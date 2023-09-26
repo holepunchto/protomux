@@ -495,6 +495,70 @@ test('keep alive - one side only', function (t) {
   setTimeout(() => t.pass(), 500)
 })
 
+test('last batch message indicator', function (t) {
+  t.plan(9)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const p1 = a.createChannel({
+    protocol: 'foo',
+    messages: [
+      { encoding: c.string, onmessage }
+    ]
+  })
+
+  const p2 = b.createChannel({
+    protocol: 'foo',
+    messages: [
+      { encoding: c.string }
+    ]
+  })
+
+  p1.open()
+  p2.open()
+
+  p2.cork()
+  p2.messages[0].send('hello')
+  p2.messages[0].send('world')
+  p2.uncork()
+
+  p2.messages[0].send('1')
+  p2.messages[0].send('2')
+
+  p2.cork()
+  p2.messages[0].send('3')
+  p2.messages[0].send('4')
+  p2.uncork()
+
+  p2.cork()
+  p2.messages[0].send('5')
+  p2.messages[0].send('6')
+  p2.uncork()
+
+  p2.cork()
+  p2.messages[0].send('7')
+  p2.uncork()
+
+  const expected = [
+    { message: 'hello', last: false },
+    { message: 'world', last: true },
+    { message: '1', last: true },
+    { message: '2', last: true },
+    { message: '3', last: false },
+    { message: '4', last: true },
+    { message: '5', last: false },
+    { message: '6', last: true },
+    { message: '7', last: true }
+  ]
+
+  function onmessage (message, channel, last) {
+    t.alike(expected.shift(), { message, last })
+  }
+})
+
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }

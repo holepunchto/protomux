@@ -107,7 +107,7 @@ class Channel {
     for (let i = 0; i < remote.pending.length; i++) {
       const p = remote.pending[i]
       this._mux._buffered -= byteSize(p.state)
-      this._recv(p.type, p.state)
+      this._recv(p.type, p.state, p.last)
     }
 
     remote.pending = null
@@ -150,9 +150,9 @@ class Channel {
     this._track(this.ondestroy(this))
   }
 
-  _recv (type, state) {
+  _recv (type, state, last) {
     if (type < this.messages.length) {
-      this.messages[type].recv(state, this)
+      this.messages[type].recv(state, this, last)
     }
   }
 
@@ -195,8 +195,8 @@ class Channel {
       type,
       encoding,
       onmessage,
-      recv (state, session) {
-        session._track(m.onmessage(encoding.decode(state), session))
+      recv (state, session, last) {
+        session._track(m.onmessage(encoding.decode(state), session, last))
       },
       send (m, session = s) {
         if (session.closed === true) return false
@@ -419,7 +419,7 @@ module.exports = class Protomux {
     if (buffer.byteLength === 0) return // ignore empty frames...
     try {
       const state = { buffer, start: 0, end: buffer.byteLength }
-      this._decode(c.uint.decode(state), state)
+      this._decode(c.uint.decode(state), state, true)
     } catch (err) {
       this._safeDestroy(err)
     }
@@ -437,7 +437,7 @@ module.exports = class Protomux {
     this.stream.end()
   }
 
-  _decode (remoteId, state) {
+  _decode (remoteId, state, last) {
     const type = c.uint.decode(state)
 
     if (remoteId === 0) {
@@ -451,11 +451,11 @@ module.exports = class Protomux {
     if (r === null) return
 
     if (r.pending !== null) {
-      this._bufferMessage(r, type, state)
+      this._bufferMessage(r, type, state, last)
       return
     }
 
-    r.session._recv(type, state)
+    r.session._recv(type, state, last)
   }
 
   _oncontrolsession (type, state) {
@@ -478,9 +478,9 @@ module.exports = class Protomux {
     }
   }
 
-  _bufferMessage (r, type, { buffer, start, end }) {
+  _bufferMessage (r, type, { buffer, start, end }, last) {
     const state = { buffer, start, end } // copy
-    r.pending.push({ type, state })
+    r.pending.push({ type, state, last })
     this._buffered += byteSize(state)
     this._pauseMaybe()
   }
@@ -508,7 +508,7 @@ module.exports = class Protomux {
         continue
       }
       state.end = state.start + len
-      this._decode(remoteId, state)
+      this._decode(remoteId, state, state.end === end)
       state.start = state.end
       state.end = end
     }
