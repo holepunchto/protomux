@@ -527,6 +527,7 @@ module.exports = class Protomux {
     }
 
     if (waiting !== null) {
+      // the waiting promises are not allowed to throw but we destroy the stream in case we are wrong
       Promise.all(waiting).then(this._uncorkBound, this._safeDestroyBound)
     }
   }
