@@ -117,8 +117,10 @@ class Channel {
   _track (p) {
     if (isPromise(p) === true) {
       this._active++
-      p.then(this._decBound, this._decAndDestroyBound)
+      return p.then(this._decBound, this._decAndDestroyBound)
     }
+
+    return null
   }
 
   _close (isRemote) {
@@ -152,8 +154,9 @@ class Channel {
 
   _recv (type, state) {
     if (type < this.messages.length) {
-      this.messages[type].recv(state, this)
+      return this.messages[type].recv(state, this)
     }
+    return null
   }
 
   cork () {
@@ -196,7 +199,7 @@ class Channel {
       encoding,
       onmessage,
       recv (state, session) {
-        session._track(m.onmessage(encoding.decode(state), session))
+        return session._track(m.onmessage(encoding.decode(state), session))
       },
       send (m, session = s) {
         if (session.closed === true) return false
@@ -261,6 +264,7 @@ module.exports = class Protomux {
 
     this._alloc = alloc || (typeof stream.alloc === 'function' ? stream.alloc.bind(stream) : b4a.allocUnsafe)
     this._safeDestroyBound = this._safeDestroy.bind(this)
+    this._uncorkBound = this.uncork.bind(this)
 
     this._remoteBacklog = 0
     this._buffered = 0
@@ -441,8 +445,7 @@ module.exports = class Protomux {
     const type = c.uint.decode(state)
 
     if (remoteId === 0) {
-      this._oncontrolsession(type, state)
-      return
+      return this._oncontrolsession(type, state)
     }
 
     const r = remoteId <= this._remote.length ? this._remote[remoteId - 1] : null
@@ -455,7 +458,7 @@ module.exports = class Protomux {
       return
     }
 
-    r.session._recv(type, state)
+    return r.session._recv(type, state)
   }
 
   _oncontrolsession (type, state) {
@@ -465,8 +468,8 @@ module.exports = class Protomux {
         break
 
       case 1:
-        this._onopensession(state)
-        break
+        // return the promise back up as this has sideeffects so we can batch reply
+        return this._onopensession(state)
 
       case 2:
         this._onrejectsession(state)
@@ -476,6 +479,8 @@ module.exports = class Protomux {
         this._onclosesession(state)
         break
     }
+
+    return null
   }
 
   _bufferMessage (r, type, { buffer, start, end }) {
@@ -501,6 +506,8 @@ module.exports = class Protomux {
     const end = state.end
     let remoteId = c.uint.decode(state)
 
+    let waiting = null
+
     while (state.end > state.start) {
       const len = c.uint.decode(state)
       if (len === 0) {
@@ -508,9 +515,20 @@ module.exports = class Protomux {
         continue
       }
       state.end = state.start + len
-      this._decode(remoteId, state)
+      // if batch contains more than one message, cork it so we reply back with a batch
+      if (end !== state.end && waiting === null) {
+        waiting = []
+        this.cork()
+      }
+      const p = this._decode(remoteId, state)
+      if (waiting !== null && p !== null) waiting.push(p)
       state.start = state.end
       state.end = end
+    }
+
+    if (waiting !== null) {
+      // the waiting promises are not allowed to throw but we destroy the stream in case we are wrong
+      Promise.all(waiting).then(this._uncorkBound, this._safeDestroyBound)
     }
   }
 
@@ -523,7 +541,7 @@ module.exports = class Protomux {
     // as we can use as an explicit control protocol declaration if we need to
     if (remoteId === 0) {
       this._rejectSession(0)
-      return
+      return null
     }
 
     const rid = remoteId - 1
@@ -544,14 +562,14 @@ module.exports = class Protomux {
 
       if (session === null) { // we already closed the channel - ignore
         this._free.push(localId - 1)
-        return
+        return null
       }
 
       this._remote[rid] = { state, pending: null, session: null }
 
       session._remoteId = remoteId
       session._fullyOpen()
-      return
+      return null
     }
 
     const copyState = { buffer: state.buffer, start: state.start, end: state.end }
@@ -564,7 +582,7 @@ module.exports = class Protomux {
     info.pairing++
     info.incoming.push(remoteId)
 
-    this._requestSession(protocol, id, info).catch(this._safeDestroyBound)
+    return this._requestSession(protocol, id, info).catch(this._safeDestroyBound)
   }
 
   _onrejectsession (state) {
