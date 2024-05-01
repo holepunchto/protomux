@@ -203,8 +203,8 @@ class Channel {
       onmessage,
       recv (state, session) {
         s.tracer.trace('recv', {
-          id: s.id,
           protocol: s.protocol,
+          id: s.id,
           type
         })
 
@@ -214,8 +214,8 @@ class Channel {
         if (session.closed === true) return false
 
         s.tracer.trace('send', {
-          id: s.id,
           protocol: s.protocol,
+          id: s.id,
           type
         })
 
