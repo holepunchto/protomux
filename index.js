@@ -197,16 +197,14 @@ class Channel {
     const s = this
     const typeLen = encodingLength(c.uint, type)
 
-    const self = this
-
     const m = {
       type,
       encoding,
       onmessage,
       recv (state, session) {
-        self.tracer.trace('recv', {
-          id: self.id,
-          protocol: self.protocol,
+        s.tracer.trace('recv', {
+          id: s.id,
+          protocol: s.protocol,
           type
         })
 
@@ -215,9 +213,9 @@ class Channel {
       send (m, session = s) {
         if (session.closed === true) return false
 
-        self.tracer.trace('send', {
-          id: self.id,
-          protocol: self.protocol,
+        s.tracer.trace('send', {
+          id: s.id,
+          protocol: s.protocol,
           type
         })
 
