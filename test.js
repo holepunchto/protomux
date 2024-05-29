@@ -80,6 +80,44 @@ test('echo message', function (t) {
   bEcho.send('hello world')
 })
 
+test('channel opened', async function (t) {
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const ap = a.createChannel({
+    protocol: 'foo'
+  })
+
+  ap.open()
+
+  t.is(await ap.fullyOpened(), false)
+  // call twice to ensure we hit the cached branch also
+  t.is(await ap.fullyOpened(), false)
+
+  const ap2 = a.createChannel({
+    protocol: 'foo'
+  })
+
+  ap2.open()
+
+  const bp = b.createChannel({
+    protocol: 'foo',
+    onopen () {
+      t.pass('b remote opened')
+    }
+  })
+
+  bp.open()
+
+  t.is(await ap2.fullyOpened(), true)
+  t.is(await bp.fullyOpened(), true)
+  // call twice to ensure we hit the cached branch also
+  t.is(await ap2.fullyOpened(), true)
+  t.is(await bp.fullyOpened(), true)
+})
+
 test('multi message', function (t) {
   const a = new Protomux(new SecretStream(true))
 

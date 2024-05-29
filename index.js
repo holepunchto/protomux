@@ -39,11 +39,23 @@ class Channel {
     this._decBound = this._dec.bind(this)
     this._decAndDestroyBound = this._decAndDestroy.bind(this)
 
+    this._openedPromise = null
+    this._openedResolve = null
+
     for (const m of messages) this.addMessage(m)
   }
 
   get drained () {
     return this._mux.drained
+  }
+
+  fullyOpened () {
+    if (this.opened) return Promise.resolve(true)
+    if (this.closed) return Promise.resolve(false)
+    if (this._openedPromise) return this._openedPromise
+
+    this._openedPromise = new Promise((resolve) => { this._openedResolve = resolve })
+    return this._openedPromise
   }
 
   open (handshake) {
@@ -104,6 +116,15 @@ class Channel {
     remote.session = this
     remote.state = null
     if (remote.pending !== null) this._drain(remote)
+
+    this._resolveOpen(true)
+  }
+
+  _resolveOpen (opened) {
+    if (this._openedResolve !== null) {
+      this._openedResolve(opened)
+      this._openedResolve = this._openedPromise = null
+    }
   }
 
   _drain (remote) {
@@ -147,6 +168,8 @@ class Channel {
     this._track(this.onclose(isRemote, this))
 
     if (this._active === 0) this._destroy()
+
+    this._resolveOpen(false)
   }
 
   _destroy () {
