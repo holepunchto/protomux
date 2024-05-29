@@ -64,6 +64,7 @@ class Channel {
       : this._mux._local.push(null) - 1
 
     this._info.opened++
+    this._info.lastChannel = this
     this._localId = id + 1
     this._mux._local[id] = this
 
@@ -152,6 +153,7 @@ class Channel {
     this.closed = true
 
     this._info.opened--
+    if (this._info.lastChannel === this) this._info.lastChannel = null
 
     if (this._remoteId > 0) {
       this._mux._remote[this._remoteId - 1] = null
@@ -354,6 +356,13 @@ module.exports = class Protomux {
     }
   }
 
+  getLastChannel ({ protocol, id = null }) {
+    const key = toKey(protocol, id)
+    const info = this._infos.get(key)
+    if (info) return info.lastChannel
+    return null
+  }
+
   pair ({ protocol, id = null }, notify) {
     this._notify.set(toKey(protocol, id), notify)
   }
@@ -436,7 +445,7 @@ module.exports = class Protomux {
     let info = this._infos.get(key)
     if (info) return info
 
-    info = { key, protocol, aliases: [], id, pairing: 0, opened: 0, incoming: [], outgoing: [] }
+    info = { key, protocol, aliases: [], id, pairing: 0, opened: 0, incoming: [], outgoing: [], lastChannel: null }
     this._infos.set(key, info)
 
     for (const alias of aliases) {
