@@ -174,6 +174,10 @@ Same as `channel.uncork` but on the muxer instance.
 
 The muxer instance is iterable, so you can iterate over all the channels.
 
+#### `mux.isIdle()`
+
+Convenience method that returns true if the number of channels is currently 0.
+
 ## License
 
 MIT

@@ -341,6 +341,10 @@ module.exports = class Protomux {
     }
   }
 
+  isIdle () {
+    return this._local.length === 0
+  }
+
   cork () {
     if (++this.corked === 1) {
       this._batch = []
