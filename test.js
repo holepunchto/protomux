@@ -533,6 +533,50 @@ test('keep alive - one side only', function (t) {
   setTimeout(() => t.pass(), 500)
 })
 
+test('isIdle - basic functionality', async function (t) {
+  t.plan(8)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const p = a.createChannel({
+    protocol: 'foo',
+    onopen () {
+      t.pass('a remote opened')
+    },
+    onclose () {
+      t.is(a.isIdle(), true, 'a is idle')
+      t.is(b.isIdle(), true, 'b is idle')
+    }
+  })
+
+  t.is(a.isIdle(), true, 'a is idle')
+  t.is(b.isIdle(), true, 'b is idle')
+
+  p.open()
+
+  p.addMessage({
+    encoding: c.string,
+    onmessage (message) {
+      t.is(message, 'hello world')
+    }
+  })
+
+  const bp = b.createChannel({
+    protocol: 'foo'
+  })
+
+  bp.open()
+  bp.addMessage({ encoding: c.string }).send('hello world')
+
+  t.is(a.isIdle(), false, 'a is not idle')
+  t.is(b.isIdle(), false, 'b is not idle')
+
+  bp.close()
+})
+
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
