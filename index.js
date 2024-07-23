@@ -342,7 +342,7 @@ module.exports = class Protomux {
   }
 
   isIdle () {
-    return this._local.length === 0
+    return this._local.length === this._free.length
   }
 
   cork () {
