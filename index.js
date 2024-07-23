@@ -341,13 +341,8 @@ module.exports = class Protomux {
     }
   }
 
-  _sessionCount () {
-    // count the number of non-null sessions
-    return this._local.reduce((a, s) => a + (s ? 1 : 0), 0)
-  }
-
   isIdle () {
-    return this._sessionCount() === 0
+    return this._local.length === this._free.length
   }
 
   cork () {
