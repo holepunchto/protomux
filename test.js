@@ -602,6 +602,12 @@ test('id unslabbed when receiving', async function (t) {
     32,
     'unslabbed id when received from remote'
   )
+
+  t.is(
+    [...a._infos.values()][0].id.buffer.byteLength,
+    32,
+    'unslabbed id when set by yourself'
+  )
 })
 
 function replicate (a, b) {
