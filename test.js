@@ -577,6 +577,39 @@ test('isIdle - basic functionality', async function (t) {
   bp.close()
 })
 
+test('id unslabbed when receiving', async function (t) {
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32)
+  const p = a.createChannel({
+    protocol,
+    id
+  })
+
+  p.open()
+
+  // Hack to make it not insta gc the info
+  b.pair({ protocol, id }, async () => await new Promise(resolve => setTimeout(resolve, 100)))
+
+  await new Promise(resolve => setImmediate(resolve))
+
+  t.is(
+    [...b._infos.values()][0].id.buffer.byteLength,
+    32,
+    'unslabbed id when received from remote'
+  )
+
+  t.is(
+    [...a._infos.values()][0].id.buffer.byteLength,
+    32,
+    'unslabbed id when set by yourself'
+  )
+})
+
 function replicate (a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }

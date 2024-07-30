@@ -3,6 +3,7 @@ const c = require('compact-encoding')
 const queueTick = require('queue-tick')
 const safetyCatch = require('safety-catch')
 const { createTracer } = require('hypertrace')
+const unslab = require('unslab')
 
 const MAX_BUFFERED = 32768
 const MAX_BACKLOG = Infinity // TODO: impl "open" backpressure
@@ -586,7 +587,7 @@ module.exports = class Protomux {
   _onopensession (state) {
     const remoteId = c.uint.decode(state)
     const protocol = c.string.decode(state)
-    const id = c.buffer.decode(state)
+    const id = unslab(c.buffer.decode(state))
 
     // remote tried to open the control session - auto reject for now
     // as we can use as an explicit control protocol declaration if we need to
