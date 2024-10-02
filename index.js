@@ -2,7 +2,6 @@ const b4a = require('b4a')
 const c = require('compact-encoding')
 const queueTick = require('queue-tick')
 const safetyCatch = require('safety-catch')
-const { createTracer } = require('hypertrace')
 const unslab = require('unslab')
 
 const MAX_BUFFERED = 32768
@@ -11,8 +10,6 @@ const MAX_BATCH = 8 * 1024 * 1024
 
 class Channel {
   constructor (mux, info, userData, protocol, aliases, id, handshake, messages, onopen, onclose, ondestroy, ondrain) {
-    this.tracer = createTracer(this)
-
     this.userData = userData
     this.protocol = protocol
     this.aliases = aliases
@@ -228,22 +225,10 @@ class Channel {
       encoding,
       onmessage,
       recv (state, session) {
-        s.tracer.trace('recv', {
-          protocol: s.protocol,
-          id: s.id,
-          type
-        })
-
         return session._track(m.onmessage(encoding.decode(state), session))
       },
       send (m, session = s) {
         if (session.closed === true) return false
-
-        s.tracer.trace('send', {
-          protocol: s.protocol,
-          id: s.id,
-          type
-        })
 
         const mux = session._mux
         const state = { buffer: null, start: 0, end: typeLen }
