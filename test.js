@@ -116,6 +116,10 @@ test('channel opened', async function (t) {
   // call twice to ensure we hit the cached branch also
   t.is(await ap2.fullyOpened(), true)
   t.is(await bp.fullyOpened(), true)
+
+  bp.close()
+
+  await t.execution(bp.fullyClosed())
 })
 
 test('multi message', function (t) {

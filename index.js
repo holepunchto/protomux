@@ -40,6 +40,9 @@ class Channel {
     this._openedPromise = null
     this._openedResolve = null
 
+    this._destroyedPromise = null
+    this._destroyedResolve = null
+
     for (const m of messages) this.addMessage(m)
   }
 
@@ -54,6 +57,14 @@ class Channel {
 
     this._openedPromise = new Promise((resolve) => { this._openedResolve = resolve })
     return this._openedPromise
+  }
+
+  fullyClosed () {
+    if (this.destroyed) return Promise.resolve()
+    if (this._destroyedPromise) return this._destroyedPromise
+
+    this._destroyedPromise = new Promise((resolve) => { this._destroyedResolve = resolve })
+    return this._destroyedPromise
   }
 
   open (handshake) {
@@ -126,6 +137,13 @@ class Channel {
     }
   }
 
+  _resolveDestroyed () {
+    if (this._destroyedResolve !== null) {
+      this._destroyedResolve()
+      this._destroyedResolve = this._destroyedPromise = null
+    }
+  }
+
   _drain (remote) {
     for (let i = 0; i < remote.pending.length; i++) {
       const p = remote.pending[i]
@@ -176,6 +194,7 @@ class Channel {
     if (this.destroyed === true) return
     this.destroyed = true
     this._track(this.ondestroy(this))
+    this._resolveDestroyed()
   }
 
   _recv (type, state) {
