@@ -199,7 +199,9 @@ class Channel {
 
   _recv (type, state) {
     if (type < this.messages.length) {
-      return this.messages[type].recv(state, this)
+      const m = this.messages[type]
+      const p = m.recv(state, this)
+      if (m.autoBatch === true) return p
     }
     return null
   }
@@ -233,6 +235,7 @@ class Channel {
     if (!opts) return this._skipMessage()
 
     const type = this.messages.length
+    const autoBatch = opts.autoBatch !== false
     const encoding = opts.encoding || c.raw
     const onmessage = opts.onmessage || noop
 
@@ -241,6 +244,7 @@ class Channel {
 
     const m = {
       type,
+      autoBatch,
       encoding,
       onmessage,
       recv (state, session) {
@@ -507,11 +511,11 @@ module.exports = class Protomux {
     const r = remoteId <= this._remote.length ? this._remote[remoteId - 1] : null
 
     // if the channel is closed ignore - could just be a pipeline message...
-    if (r === null) return
+    if (r === null) return null
 
     if (r.pending !== null) {
       this._bufferMessage(r, type, state)
-      return
+      return null
     }
 
     return r.session._recv(type, state)
