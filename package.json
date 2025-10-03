@@ -16,10 +16,13 @@
   "devDependencies": {
     "@hyperswarm/secret-stream": "^6.0.0",
     "brittle": "^3.0.0",
-    "standard": "^16.0.4"
+    "prettier": "^3.6.2",
+    "prettier-config-holepunch": "^1.0.0"
   },
   "scripts": {
-    "test": "standard && brittle test.js"
+    "format": "prettier --write .",
+    "lint": "prettier --check .",
+    "test": "npm run lint && brittle test.js"
   },
   "repository": {
     "type": "git",
