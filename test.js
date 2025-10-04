@@ -12,7 +12,7 @@ test('basic', function (t) {
 
   const p = a.createChannel({
     protocol: 'foo',
-    onopen () {
+    onopen() {
       t.pass('a remote opened')
     }
   })
@@ -21,7 +21,7 @@ test('basic', function (t) {
 
   p.addMessage({
     encoding: c.string,
-    onmessage (message) {
+    onmessage(message) {
       t.is(message, 'hello world')
     }
   })
@@ -50,7 +50,7 @@ test('echo message', function (t) {
 
   const aEcho = ap.addMessage({
     encoding: c.string,
-    onmessage (message) {
+    onmessage(message) {
       aEcho.send('echo: ' + message)
     }
   })
@@ -61,7 +61,7 @@ test('echo message', function (t) {
 
   const bp = b.createChannel({
     protocol: 'foo',
-    onopen () {
+    onopen() {
       t.pass('b remote opened')
     }
   })
@@ -70,7 +70,7 @@ test('echo message', function (t) {
 
   const bEcho = bp.addMessage({
     encoding: c.string,
-    onmessage (message) {
+    onmessage(message) {
       t.is(message, 'echo: hello world')
     }
   })
@@ -104,7 +104,7 @@ test('channel opened', async function (t) {
 
   const bp = b.createChannel({
     protocol: 'foo',
-    onopen () {
+    onopen() {
       t.pass('b remote opened')
     }
   })
@@ -158,10 +158,7 @@ test('multi message', function (t) {
   a2.send('a string with 42')
   a3.send('should be ignored')
 
-  const expected = [
-    42,
-    'a string with 42'
-  ]
+  const expected = [42, 'a string with 42']
 
   b1.onmessage = function (message) {
     t.is(message, expected.shift())
@@ -205,12 +202,7 @@ test('corks', function (t) {
 
   t.plan(4 + 1)
 
-  const expected = [
-    1,
-    2,
-    3,
-    'a string'
-  ]
+  const expected = [1, 2, 3, 'a string']
 
   a1.send(1)
   a1.send(2)
@@ -287,7 +279,7 @@ test('handshake', function (t) {
   const p = a.createChannel({
     protocol: 'foo',
     handshake: c.string,
-    onopen (handshake) {
+    onopen(handshake) {
       t.is(handshake, 'b handshake')
     }
   })
@@ -297,7 +289,7 @@ test('handshake', function (t) {
   const bp = b.createChannel({
     protocol: 'foo',
     handshake: c.string,
-    onopen (handshake) {
+    onopen(handshake) {
       t.is(handshake, 'a handshake')
     }
   })
@@ -319,7 +311,7 @@ test('rejections', function (t) {
   for (let i = 0; i < 10; i++) {
     const p = a.createChannel({
       protocol: 'foo#' + i,
-      onclose () {
+      onclose() {
         closed++
         if (closed === 10) t.pass('all closed')
       }
@@ -341,7 +333,7 @@ test('pipeline close and rejections', function (t) {
   for (let i = 0; i < 10; i++) {
     const p = a.createChannel({
       protocol: 'foo#' + i,
-      onclose () {
+      onclose() {
         closed++
         if (closed === 10) {
           t.pass('all closed')
@@ -363,7 +355,7 @@ test('alias', function (t) {
   const p = a.createChannel({
     protocol: 'foo',
     aliases: ['bar'],
-    onopen () {
+    onopen() {
       t.pass('a remote opened')
     }
   })
@@ -372,7 +364,7 @@ test('alias', function (t) {
 
   p.addMessage({
     encoding: c.string,
-    onmessage (message) {
+    onmessage(message) {
       t.is(message, 'hello world')
     }
   })
@@ -396,14 +388,18 @@ test('deduplicate muxers', function (t) {
   const a = Protomux.from(sa)
   const foo = a.createChannel({
     protocol: 'foo',
-    onopen () { t.pass('a remote opened') }
+    onopen() {
+      t.pass('a remote opened')
+    }
   })
 
   foo.open()
 
   foo.addMessage({
     encoding: c.string,
-    onmessage (message) { t.is(message, 'hello foo') }
+    onmessage(message) {
+      t.is(message, 'hello foo')
+    }
   })
 
   const bfoo = Protomux.from(sb).createChannel({ protocol: 'foo' })
@@ -412,14 +408,18 @@ test('deduplicate muxers', function (t) {
   const a2 = Protomux.from(sa)
   const bar = a2.createChannel({
     protocol: 'bar',
-    onopen () { t.pass('a remote opened') }
+    onopen() {
+      t.pass('a remote opened')
+    }
   })
 
   bar.open()
 
   bar.addMessage({
     encoding: c.string,
-    onmessage (message) { t.is(message, 'hello bar') }
+    onmessage(message) {
+      t.is(message, 'hello bar')
+    }
   })
 
   const bbar = Protomux.from(sb).createChannel({ protocol: 'bar' })
@@ -443,10 +443,10 @@ test('open + send + close on same tick', async function (t) {
 
   const ac = a.createChannel({
     protocol: 'foo',
-    onopen () {
+    onopen() {
       t.pass('a opened')
     },
-    onclose () {
+    onclose() {
       t.pass('a closed')
     }
   })
@@ -454,15 +454,17 @@ test('open + send + close on same tick', async function (t) {
   ac.open()
   ac.addMessage({
     encoding: c.string,
-    onmessage (message) { t.is(message, 'hello') }
+    onmessage(message) {
+      t.is(message, 'hello')
+    }
   })
 
   const bc = b.createChannel({
     protocol: 'foo',
-    onopen () {
+    onopen() {
       t.fail('b opened')
     },
-    onclose () {
+    onclose() {
       t.pass('b closed')
     }
   })
@@ -485,9 +487,7 @@ test('drain', function (t) {
 
   const a = mux1.createChannel({
     protocol: 'foo',
-    messages: [
-      { encoding: c.string }
-    ]
+    messages: [{ encoding: c.string }]
   })
 
   t.ok(a.drained)
@@ -496,10 +496,8 @@ test('drain', function (t) {
 
   const b = mux2.createChannel({
     protocol: 'foo',
-    messages: [
-      { encoding: c.string }
-    ],
-    ondrain (c) {
+    messages: [{ encoding: c.string }],
+    ondrain(c) {
       t.is(c, b)
       t.ok(mux1.drained)
     }
@@ -511,8 +509,10 @@ test('drain', function (t) {
 
   while (true) {
     const drained = b.messages[0].send('hello world')
-    if (b.drained !== drained) t.fail('Drained property should be equal as in channel')
-    if (mux2.drained !== drained) t.fail('Drained property should be equal as in mux')
+    if (b.drained !== drained)
+      t.fail('Drained property should be equal as in channel')
+    if (mux2.drained !== drained)
+      t.fail('Drained property should be equal as in mux')
 
     if (!drained) {
       t.pass()
@@ -547,10 +547,10 @@ test('isIdle - basic functionality', async function (t) {
 
   const p = a.createChannel({
     protocol: 'foo',
-    onopen () {
+    onopen() {
       t.pass('a remote opened')
     },
-    onclose () {
+    onclose() {
       t.is(a.isIdle(), true, 'a is idle')
       t.is(b.isIdle(), true, 'b is idle')
     }
@@ -563,7 +563,7 @@ test('isIdle - basic functionality', async function (t) {
 
   p.addMessage({
     encoding: c.string,
-    onmessage (message) {
+    onmessage(message) {
       t.is(message, 'hello world')
     }
   })
@@ -597,9 +597,12 @@ test('id unslabbed when receiving', async function (t) {
   p.open()
 
   // Hack to make it not insta gc the info
-  b.pair({ protocol, id }, async () => await new Promise(resolve => setTimeout(resolve, 100)))
+  b.pair(
+    { protocol, id },
+    async () => await new Promise((resolve) => setTimeout(resolve, 100))
+  )
 
-  await new Promise(resolve => setImmediate(resolve))
+  await new Promise((resolve) => setImmediate(resolve))
 
   t.is(
     [...b._infos.values()][0].id.buffer.byteLength,
@@ -614,6 +617,6 @@ test('id unslabbed when receiving', async function (t) {
   )
 })
 
-function replicate (a, b) {
+function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
