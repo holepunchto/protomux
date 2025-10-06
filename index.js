@@ -85,10 +85,7 @@ class Channel {
   }
 
   open(handshake) {
-    const id =
-      this._mux._free.length > 0
-        ? this._mux._free.pop()
-        : this._mux._local.push(null) - 1
+    const id = this._mux._free.length > 0 ? this._mux._free.pop() : this._mux._local.push(null) - 1
 
     this._info.opened++
     this._info.lastChannel = this
@@ -138,9 +135,7 @@ class Channel {
     const remote = this._mux._remote[this._remoteId - 1]
 
     this.opened = true
-    this.handshake = this._handshake
-      ? this._handshake.decode(remote.state)
-      : null
+    this.handshake = this._handshake ? this._handshake.decode(remote.state) : null
     this._track(this.onopen(this.handshake, this))
 
     remote.session = this
@@ -332,10 +327,7 @@ module.exports = class Protomux {
     this.drained = true
 
     this._alloc =
-      alloc ||
-      (typeof stream.alloc === 'function'
-        ? stream.alloc.bind(stream)
-        : b4a.allocUnsafe)
+      alloc || (typeof stream.alloc === 'function' ? stream.alloc.bind(stream) : b4a.allocUnsafe)
     this._safeDestroyBound = this._safeDestroy.bind(this)
     this._uncorkBound = this.uncork.bind(this)
 
@@ -483,10 +475,7 @@ module.exports = class Protomux {
       this._batchState = { buffer: null, start: 0, end: 1 }
     }
 
-    if (
-      this._batch.length === 0 ||
-      this._batch[this._batch.length - 1].localId !== localId
-    ) {
+    if (this._batch.length === 0 || this._batch[this._batch.length - 1].localId !== localId) {
       this._batchState.end++
       c.uint.preencode(this._batchState, localId)
     }
@@ -547,11 +536,7 @@ module.exports = class Protomux {
   }
 
   _gc(info) {
-    if (
-      info.opened === 0 &&
-      info.outgoing.length === 0 &&
-      info.incoming.length === 0
-    ) {
+    if (info.opened === 0 && info.outgoing.length === 0 && info.incoming.length === 0) {
       this._infos.delete(info.key)
 
       for (const alias of info.aliases) this._infos.delete(alias)
@@ -588,8 +573,7 @@ module.exports = class Protomux {
       return this._oncontrolsession(type, state)
     }
 
-    const r =
-      remoteId <= this._remote.length ? this._remote[remoteId - 1] : null
+    const r = remoteId <= this._remote.length ? this._remote[remoteId - 1] : null
 
     // if the channel is closed ignore - could just be a pipeline message...
     if (r === null) return null
@@ -728,9 +712,7 @@ module.exports = class Protomux {
     info.pairing++
     info.incoming.push(remoteId)
 
-    return this._requestSession(protocol, id, info).catch(
-      this._safeDestroyBound
-    )
+    return this._requestSession(protocol, id, info).catch(this._safeDestroyBound)
   }
 
   _onrejectsession(state) {
@@ -769,9 +751,7 @@ module.exports = class Protomux {
   }
 
   async _requestSession(protocol, id, info) {
-    const notify =
-      this._notify.get(toKey(protocol, id)) ||
-      this._notify.get(toKey(protocol, null))
+    const notify = this._notify.get(toKey(protocol, id)) || this._notify.get(toKey(protocol, null))
 
     if (notify) await notify(id)
 

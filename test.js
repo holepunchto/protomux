@@ -509,10 +509,8 @@ test('drain', function (t) {
 
   while (true) {
     const drained = b.messages[0].send('hello world')
-    if (b.drained !== drained)
-      t.fail('Drained property should be equal as in channel')
-    if (mux2.drained !== drained)
-      t.fail('Drained property should be equal as in mux')
+    if (b.drained !== drained) t.fail('Drained property should be equal as in channel')
+    if (mux2.drained !== drained) t.fail('Drained property should be equal as in mux')
 
     if (!drained) {
       t.pass()
@@ -597,24 +595,13 @@ test('id unslabbed when receiving', async function (t) {
   p.open()
 
   // Hack to make it not insta gc the info
-  b.pair(
-    { protocol, id },
-    async () => await new Promise((resolve) => setTimeout(resolve, 100))
-  )
+  b.pair({ protocol, id }, async () => await new Promise((resolve) => setTimeout(resolve, 100)))
 
   await new Promise((resolve) => setImmediate(resolve))
 
-  t.is(
-    [...b._infos.values()][0].id.buffer.byteLength,
-    32,
-    'unslabbed id when received from remote'
-  )
+  t.is([...b._infos.values()][0].id.buffer.byteLength, 32, 'unslabbed id when received from remote')
 
-  t.is(
-    [...a._infos.values()][0].id.buffer.byteLength,
-    32,
-    'unslabbed id when set by yourself'
-  )
+  t.is([...a._infos.values()][0].id.buffer.byteLength, 32, 'unslabbed id when set by yourself')
 })
 
 function replicate(a, b) {
