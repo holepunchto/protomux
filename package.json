@@ -17,7 +17,7 @@
     "@hyperswarm/secret-stream": "^6.0.0",
     "brittle": "^3.0.0",
     "prettier": "^3.6.2",
-    "prettier-config-holepunch": "^1.0.0"
+    "prettier-config-holepunch": "^2.0.0"
   },
   "scripts": {
     "format": "prettier --write .",
