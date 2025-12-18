@@ -698,11 +698,7 @@ module.exports = class Protomux {
       return null
     }
 
-    const copyState = {
-      buffer: state.buffer,
-      start: state.start,
-      end: state.end
-    }
+    const copyState = { buffer: state.buffer, start: state.start, end: state.end }
     this._remote[rid] = { state: copyState, pending: [], session: null }
 
     if (++this._remoteBacklog > MAX_BACKLOG) {
