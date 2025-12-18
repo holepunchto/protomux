@@ -8,7 +8,7 @@ npm install protomux
 
 ## Usage
 
-``` js
+```js
 const Protomux = require('protomux')
 const c = require('compact-encoding')
 
@@ -22,10 +22,10 @@ const mux = new Protomux(aStreamThatFrames)
 const cool = mux.createChannel({
   protocol: 'cool-protocol',
   id: Buffer.from('optional binary id'),
-  onopen () {
+  onopen() {
     console.log('the other side opened this protocol!')
   },
-  onclose () {
+  onclose() {
     console.log('either side closed the protocol')
   }
 })
@@ -34,14 +34,14 @@ const cool = mux.createChannel({
 
 const one = cool.addMessage({
   encoding: c.string,
-  onmessage (m) {
+  onmessage(m) {
     console.log('recv message (1)', m)
   }
 })
 
 const two = cool.addMessage({
   encoding: c.bool,
-  onmessage (m) {
+  onmessage(m) {
     console.log('recv message (2)', m)
   }
 })
@@ -64,7 +64,7 @@ Make a new instance. `stream` should be a framed stream, preserving the messages
 
 Options include:
 
-``` js
+```js
 {
   // Called when the muxer wants to allocate a message that is written, defaults to Buffer.allocUnsafe.
   alloc (size) {}
@@ -81,7 +81,7 @@ Add a new protocol channel.
 
 Options include:
 
-``` js
+```js
 {
   // Used to match the protocol
   protocol: 'name of the protocol',
@@ -104,7 +104,7 @@ Options include:
 
 Sessions are paired based on a queue, so the first remote channel with the same `protocol` and `id`.
 
-__NOTE__: `mux.createChannel` returns `null` if the channel should not be opened, ie it's a duplicate channel or the remote has already closed this one.
+**NOTE**: `mux.createChannel` returns `null` if the channel should not be opened, ie it's a duplicate channel or the remote has already closed this one.
 
 If you want multiple sessions with the same `protocol` and `id`, set `unique: false` as an option.
 
@@ -128,7 +128,7 @@ Open the channel.
 
 Add/register a message type for a certain encoding. Options include:
 
-``` js
+```js
 {
   // compact-encoding specifying how to encode/decode this message
   encoding: c.binary,

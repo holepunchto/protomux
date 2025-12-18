@@ -16,10 +16,16 @@
   "devDependencies": {
     "@hyperswarm/secret-stream": "^6.0.0",
     "brittle": "^3.0.0",
-    "standard": "^16.0.4"
+    "lunte": "^1.0.0",
+    "prettier": "^3.6.2",
+    "prettier-config-holepunch": "^2.0.0"
   },
   "scripts": {
-    "test": "standard && brittle test.js"
+    "format": "prettier --write .",
+    "lint": "prettier --check . && lunte",
+    "test": "npm run test:node && npm run test:bare",
+    "test:node": "brittle-node test.js",
+    "test:bare": "brittle-bare test.js"
   },
   "repository": {
     "type": "git",
