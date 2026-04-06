@@ -604,6 +604,76 @@ test('id unslabbed when receiving', async function (t) {
   t.is([...a._infos.values()][0].id.buffer.byteLength, 32, 'unslabbed id when set by yourself')
 })
 
+test('supports setting userData after `.createChannel()` but before `.open()`', async function (t) {
+  // This test showcases why `_fullyOpenSoon()` queues `_fullyOpen()` to defer it running
+  t.plan(1)
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32)
+  const p = a.createChannel({
+    protocol,
+    id
+  })
+
+  p.userData = true
+
+  b.pair({ protocol, id }, async () => {
+    const p2 = b.createChannel({
+      protocol,
+      id,
+      onopen(_, c) {
+        t.ok(c.userData, 'userData is set on channel onopen')
+      }
+    })
+
+    p2.userData = true
+    p2.open()
+  })
+
+  p.open()
+})
+
+test('incoming onopen runs after the pair callback finishes', function (t) {
+  // Strict scheduling test that asserts incoming `onopen` is deferred until after `pair()` returns
+
+  t.plan(3)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32)
+
+  let setupDone = false
+  let opened = false
+
+  b.pair({ protocol, id }, () => {
+    b.createChannel({
+      protocol,
+      id,
+      onopen() {
+        opened = true
+        t.ok(setupDone, 'onopen runs after pair callback setup finishes')
+      }
+    }).open()
+
+    t.absent(opened, 'onopen did not fire before the pair callback returned')
+    setupDone = true
+  })
+
+  a.createChannel({ protocol, id }).open()
+
+  // Wait one turn so the deferred `_fullyOpen()` callback has a chance to run.
+  setImmediate(() => {
+    t.ok(opened, 'onopen fired after the pair callback finished')
+  })
+})
 function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
