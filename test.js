@@ -604,6 +604,39 @@ test('id unslabbed when receiving', async function (t) {
   t.is([...a._infos.values()][0].id.buffer.byteLength, 32, 'unslabbed id when set by yourself')
 })
 
+test('supports setting userData after `.createChannel()` but before `.open()`', async function (t) {
+  // This test showcases why `_fullyOpenSoon()` queues `_fullyOpen()` to defer it running
+  t.plan(1)
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32)
+  const p = a.createChannel({
+    protocol,
+    id
+  })
+
+  p.userData = true
+
+  p.open()
+
+  b.pair({ protocol, id }, async () => {
+    const p2 = b.createChannel({
+      protocol,
+      id,
+      onopen(_, c) {
+        t.ok(c.userData, 'userData is set on channel onopen')
+      }
+    })
+
+    p2.userData = true
+    p2.open()
+  })
+})
+
 function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
