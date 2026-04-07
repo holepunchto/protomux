@@ -633,8 +633,8 @@ test('supports setting userData after `.createChannel()` but before `.open()`', 
     p2.userData = true
     p2.open()
   })
-  
-  p.open()  
+
+  p.open()
 })
 
 function replicate(a, b) {
