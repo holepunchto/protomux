@@ -621,8 +621,6 @@ test('supports setting userData after `.createChannel()` but before `.open()`', 
 
   p.userData = true
 
-  p.open()
-
   b.pair({ protocol, id }, async () => {
     const p2 = b.createChannel({
       protocol,
@@ -635,6 +633,8 @@ test('supports setting userData after `.createChannel()` but before `.open()`', 
     p2.userData = true
     p2.open()
   })
+  
+  p.open()  
 })
 
 function replicate(a, b) {
