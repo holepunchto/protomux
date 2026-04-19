@@ -142,14 +142,15 @@ class Channel {
 
     const remote = this._mux._remote[this._remoteId - 1]
 
-    this.opened = true
     this.handshake = this._handshake ? this._handshake.decode(remote.state) : null
     this._track(this.onopen(this.handshake, this))
 
     remote.session = this
     remote.state = null
     if (remote.pending !== null) this._drain(remote)
+    if (this._mux._destroying === true) return
 
+    this.opened = true
     this._resolveOpen(true)
   }
 
