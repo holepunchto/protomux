@@ -173,6 +173,7 @@ class Channel {
       const p = remote.pending[i]
       this._mux._buffered -= byteSize(p.state)
       this._recv(p.type, p.state)
+      if (this._mux._destroying === true) return
     }
 
     remote.pending = null
@@ -351,6 +352,8 @@ module.exports = class Protomux {
 
     this._infos = new Map()
     this._notify = new Map()
+    // stream.destroyed flips asynchronously on streamx-based transports.
+    this._destroying = false
 
     this.stream.on('data', this._ondata.bind(this))
     this.stream.on('drain', this._ondrain.bind(this))
@@ -806,15 +809,18 @@ module.exports = class Protomux {
   }
 
   destroy(err) {
+    this._destroying = true
     this.stream.destroy(err)
   }
 
   _safeDestroy(err) {
     safetyCatch(err)
+    this._destroying = true
     this.stream.destroy(err)
   }
 
   _shutdown() {
+    this._destroying = true
     for (const s of this._local) {
       if (s !== null) s._close(true)
     }
