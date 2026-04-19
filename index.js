@@ -126,7 +126,15 @@ class Channel {
 
   _fullyOpenSoon() {
     this._mux._remote[this._remoteId - 1].session = this
-    queueTick(this._fullyOpen.bind(this))
+    queueTick(this._fullyOpenOrDestroy.bind(this))
+  }
+
+  _fullyOpenOrDestroy() {
+    try {
+      this._fullyOpen()
+    } catch (err) {
+      this._mux._safeDestroyBound(err)
+    }
   }
 
   _fullyOpen() {
