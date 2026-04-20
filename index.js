@@ -126,7 +126,15 @@ class Channel {
 
   _fullyOpenSoon() {
     this._mux._remote[this._remoteId - 1].session = this
-    queueTick(this._fullyOpen.bind(this))
+    queueTick(this._fullyOpenOrDestroy.bind(this))
+  }
+
+  _fullyOpenOrDestroy() {
+    try {
+      this._fullyOpen()
+    } catch (err) {
+      this._mux._safeDestroyBound(err)
+    }
   }
 
   _fullyOpen() {
@@ -134,14 +142,15 @@ class Channel {
 
     const remote = this._mux._remote[this._remoteId - 1]
 
-    this.opened = true
     this.handshake = this._handshake ? this._handshake.decode(remote.state) : null
     this._track(this.onopen(this.handshake, this))
 
     remote.session = this
     remote.state = null
     if (remote.pending !== null) this._drain(remote)
+    if (this._mux._destroying === true) return
 
+    this.opened = true
     this._resolveOpen(true)
   }
 
@@ -164,6 +173,7 @@ class Channel {
       const p = remote.pending[i]
       this._mux._buffered -= byteSize(p.state)
       this._recv(p.type, p.state)
+      if (this._mux._destroying === true) return
     }
 
     remote.pending = null
@@ -342,6 +352,8 @@ module.exports = class Protomux {
 
     this._infos = new Map()
     this._notify = new Map()
+    // stream.destroyed flips asynchronously on streamx-based transports.
+    this._destroying = false
 
     this.stream.on('data', this._ondata.bind(this))
     this.stream.on('drain', this._ondrain.bind(this))
@@ -797,15 +809,18 @@ module.exports = class Protomux {
   }
 
   destroy(err) {
+    this._destroying = true
     this.stream.destroy(err)
   }
 
   _safeDestroy(err) {
     safetyCatch(err)
+    this._destroying = true
     this.stream.destroy(err)
   }
 
   _shutdown() {
+    this._destroying = true
     for (const s of this._local) {
       if (s !== null) s._close(true)
     }
