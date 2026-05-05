@@ -100,7 +100,7 @@ class Channel {
 
     c.uint.preencode(state, this._localId)
     c.string.preencode(state, this.protocol)
-    c.buffer.preencode(state, this.id)
+    c.optionalBuffer.preencode(state, this.id)
     if (this._handshake) this._handshake.preencode(state, handshake)
 
     state.buffer = this._mux._alloc(state.end)
@@ -109,7 +109,7 @@ class Channel {
     state.buffer[1] = 1
     c.uint.encode(state, this._localId)
     c.string.encode(state, this.protocol)
-    c.buffer.encode(state, this.id)
+    c.optionalBuffer.encode(state, this.id)
     if (this._handshake) this._handshake.encode(state, handshake)
 
     this._mux._write0(state.buffer)
@@ -672,7 +672,7 @@ module.exports = class Protomux {
   _onopensession(state) {
     const remoteId = c.uint.decode(state)
     const protocol = c.string.decode(state)
-    const id = unslab(c.buffer.decode(state))
+    const id = unslab(c.optionalBuffer.decode(state))
 
     // remote tried to open the control session - auto reject for now
     // as we can use as an explicit control protocol declaration if we need to
