@@ -674,6 +674,55 @@ test('incoming onopen runs after the pair callback finishes', function (t) {
     t.ok(opened, 'onopen fired after the pair callback finished')
   })
 })
+test('an open is not consumed by an already-closed outgoing entry', function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  // b opens a channel and closes it before the remote's open arrives, then
+  // opens a replacement: a's in-flight open must pair with the replacement,
+  // not be consumed by the closed channel's stale outgoing entry
+  const b1 = b.createChannel({ protocol: 'foo' })
+  b1.open()
+  b1.close()
+
+  const b2 = b.createChannel({
+    protocol: 'foo',
+    onopen() {
+      t.pass('replacement channel opened')
+    }
+  })
+  b2.open()
+
+  const a1 = a.createChannel({ protocol: 'foo' })
+  a1.open()
+})
+
+test('an open falls through to pair() when the only outgoing entry is closed', function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  // b closed its only channel while a's open was in flight: the open should
+  // be delivered through pairing, like any other unsolicited open
+  b.pair({ protocol: 'foo' }, function () {
+    t.pass('pair notified for the crossed open')
+  })
+
+  const b1 = b.createChannel({ protocol: 'foo' })
+  b1.open()
+  b1.close()
+
+  const a1 = a.createChannel({ protocol: 'foo' })
+  a1.open()
+})
+
 function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }

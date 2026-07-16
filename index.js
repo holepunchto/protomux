@@ -693,14 +693,17 @@ module.exports = class Protomux {
       throw new Error('Invalid open message')
     }
 
-    if (info.outgoing.length > 0) {
+    while (info.outgoing.length > 0) {
       const localId = info.outgoing.shift()
       const session = this._local[localId - 1]
 
       if (session === null) {
-        // we already closed the channel - ignore
+        // the local channel closed while its open was in flight (a close/open
+        // crossing) - skip the stale entry instead of consuming the remote's
+        // open against it, otherwise the remote ends up with a half-open
+        // channel it believes was delivered
         this._free.push(localId - 1)
-        return null
+        continue
       }
 
       this._remote[rid] = { state, pending: null, session: null }
