@@ -3,6 +3,7 @@ const SecretStream = require('@hyperswarm/secret-stream')
 const test = require('brittle')
 const c = require('compact-encoding')
 const b4a = require('b4a')
+const uncaughts = require('uncaughts')
 
 test('basic', function (t) {
   const a = new Protomux(new SecretStream(true))
@@ -674,6 +675,112 @@ test('incoming onopen runs after the pair callback finishes', function (t) {
     t.ok(opened, 'onopen fired after the pair callback finished')
   })
 })
+
+test('async onmessage rejecting after channel close does not destroy the stream', async function (t) {
+  t.plan(2)
+
+  let error = null
+  const uncaughtHandler = (err) => {
+    t.is(err, error, 'error was uncaught')
+  }
+  uncaughts.on(uncaughtHandler)
+  t.teardown(() => uncaughts.off(uncaughtHandler))
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let streamDestroyed = false
+  a.stream.on('error', function () {
+    t.fail('a stream errored')
+  })
+  a.stream.on('close', function () {
+    streamDestroyed = true
+  })
+
+  let rejectMessage = null
+  let handlerReady = null
+  const received = new Promise((resolve) => {
+    handlerReady = resolve
+  })
+
+  const aChannel = a.createChannel({ protocol: 'foo' })
+  aChannel.open()
+  aChannel.addMessage({
+    encoding: c.string,
+    onmessage() {
+      return new Promise((_, reject) => {
+        rejectMessage = reject
+        handlerReady()
+      })
+    }
+  })
+
+  const bc = b.createChannel({ protocol: 'foo' })
+  bc.open()
+  bc.addMessage({ encoding: c.string }).send('hello')
+
+  await received
+
+  aChannel.close()
+  error = new Error('boom')
+  rejectMessage(error)
+
+  await new Promise((resolve) => setTimeout(resolve, 50))
+
+  t.absent(streamDestroyed, 'stream was not destroyed after the channel closed')
+})
+
+test('async onmessage rejecting while channel is open still destroys the stream', async function (t) {
+  t.plan(2)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let error = null
+  let streamDestroyed = false
+  a.stream.on('error', function (err) {
+    t.is(err, error, 'stream got error')
+  })
+  a.stream.on('close', function () {
+    streamDestroyed = true
+  })
+
+  let rejectMessage = null
+  let handlerReady = null
+  const received = new Promise((resolve) => {
+    handlerReady = resolve
+  })
+
+  const ac = a.createChannel({ protocol: 'foo' })
+  ac.open()
+  ac.addMessage({
+    encoding: c.string,
+    onmessage() {
+      return new Promise((_, reject) => {
+        rejectMessage = reject
+        handlerReady()
+      })
+    }
+  })
+
+  const bc = b.createChannel({ protocol: 'foo' })
+  bc.open()
+  bc.addMessage({ encoding: c.string }).send('hello')
+
+  await received
+
+  error = new Error('boom')
+  rejectMessage(error)
+
+  await new Promise((resolve) => setTimeout(resolve, 50))
+
+  t.ok(streamDestroyed, 'stream was destroyed while the channel was still open')
+})
+
 function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
