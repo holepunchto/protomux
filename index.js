@@ -185,7 +185,10 @@ class Channel {
   _track(p, maybeDestroy) {
     if (isPromise(p) === true) {
       this._active++
-      return p.then(this._decBound, maybeDestroy ? this._decAndMaybeDestroyBound : this._decAndDestroyBound)
+      return p.then(
+        this._decBound,
+        maybeDestroy ? this._decAndMaybeDestroyBound : this._decAndDestroyBound
+      )
     }
 
     return null
