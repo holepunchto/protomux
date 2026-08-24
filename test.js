@@ -3,7 +3,6 @@ const SecretStream = require('@hyperswarm/secret-stream')
 const test = require('brittle')
 const c = require('compact-encoding')
 const b4a = require('b4a')
-const uncaughts = require('uncaughts')
 
 test('basic', function (t) {
   const a = new Protomux(new SecretStream(true))
@@ -680,11 +679,6 @@ test('async onmessage rejecting after channel close does not destroy the stream'
   t.plan(2)
 
   let error = null
-  const uncaughtHandler = (err) => {
-    t.is(err, error, 'error was uncaught')
-  }
-  uncaughts.on(uncaughtHandler)
-  t.teardown(() => uncaughts.off(uncaughtHandler))
 
   const a = new Protomux(new SecretStream(true))
   const b = new Protomux(new SecretStream(false))
@@ -694,6 +688,9 @@ test('async onmessage rejecting after channel close does not destroy the stream'
   let streamDestroyed = false
   a.stream.on('error', function () {
     t.fail('a stream errored')
+  })
+  a.stream.on('warning', function (err) {
+    t.is(err, error, 'the stream warned the error')
   })
   a.stream.on('close', function () {
     streamDestroyed = true

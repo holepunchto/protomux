@@ -122,7 +122,7 @@ class Channel {
 
   _decAndMaybeDestroy(maybeDestroy, err) {
     this._dec()
-    if (maybeDestroy && this.closed) throw err
+    if (maybeDestroy && this.closed) return this._mux._warn(err)
     this._mux._safeDestroy(err)
   }
 
@@ -822,6 +822,11 @@ module.exports = class Protomux {
     safetyCatch(err)
     this._destroying = true
     this.stream.destroy(err)
+  }
+
+  _warn(err) {
+    safetyCatch(err)
+    this.stream.emit('warning', err)
   }
 
   _shutdown() {
