@@ -135,7 +135,7 @@ Add/register a message type for a certain encoding. Options include:
   // Called when the remote side sends a message.
   // Errors here are caught and forwared to stream.destroy,
   // unless the channel has already closed, in which case the stream
-  // is left alone but the error is rethrown
+  // is left alone but the error is emitted via the `warning` event
   async onmessage (message) { }
 }
 ```
