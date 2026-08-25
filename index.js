@@ -48,8 +48,7 @@ class Channel {
     this._extensions = null
 
     this._decBound = this._dec.bind(this)
-    this._decAndDestroyBound = this._decAndMaybeDestroy.bind(this, false)
-    this._decAndMaybeDestroyBound = this._decAndMaybeDestroy.bind(this, true)
+    this._decAndMaybeDestroyBound = this._decAndMaybeDestroy.bind(this)
 
     this._openedPromise = null
     this._openedResolve = null
@@ -120,9 +119,9 @@ class Channel {
     if (--this._active === 0 && this.closed === true) this._destroy()
   }
 
-  _decAndMaybeDestroy(maybeDestroy, err) {
+  _decAndMaybeDestroy(err) {
     this._dec()
-    if (maybeDestroy && this.closed) return this._mux._warn(err)
+    if (this.closed) return this._mux._warn(err)
     this._mux._safeDestroy(err)
   }
 
@@ -182,13 +181,10 @@ class Channel {
     this._mux._resumeMaybe()
   }
 
-  _track(p, maybeDestroy) {
+  _track(p) {
     if (isPromise(p) === true) {
       this._active++
-      return p.then(
-        this._decBound,
-        maybeDestroy ? this._decAndMaybeDestroyBound : this._decAndDestroyBound
-      )
+      return p.then(this._decBound, this._decAndMaybeDestroyBound)
     }
 
     return null
@@ -278,7 +274,7 @@ class Channel {
       encoding,
       onmessage,
       recv(state, session) {
-        return session._track(m.onmessage(encoding.decode(state), session), true)
+        return session._track(m.onmessage(encoding.decode(state), session))
       },
       send(m, session = s) {
         if (session.closed === true) return false
