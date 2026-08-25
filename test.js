@@ -778,6 +778,221 @@ test('async onmessage rejecting while channel is open still destroys the stream'
   t.ok(streamDestroyed, 'stream was destroyed while the channel was still open')
 })
 
+test('async onopen rejecting after channel close does not destroy the stream', async function (t) {
+  t.plan(2)
+
+  let error = null
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let streamDestroyed = false
+  b.stream.on('error', function () {
+    t.fail('b stream errored')
+  })
+  b.stream.on('warning', function (err) {
+    t.is(err, error, 'the stream warned the error')
+  })
+  b.stream.on('close', function () {
+    streamDestroyed = true
+  })
+
+  const protocol = 'foo'
+
+  let rejectOpen = null
+  let handlerReady = null
+  const opened = new Promise((resolve) => {
+    handlerReady = resolve
+  })
+
+  let bc = null
+  b.pair({ protocol }, () => {
+    bc = b.createChannel({
+      protocol,
+      onopen() {
+        return new Promise((_, reject) => {
+          rejectOpen = reject
+          handlerReady()
+        })
+      }
+    })
+    bc.open()
+  })
+
+  a.createChannel({ protocol }).open()
+
+  await opened
+
+  bc.close()
+  error = new Error('boom')
+  rejectOpen(error)
+
+  await new Promise(setImmediate)
+
+  t.absent(streamDestroyed, 'stream was not destroyed after the channel closed')
+})
+
+test('async onclose rejecting emits a warning instead of destroying the stream', async function (t) {
+  t.plan(3)
+
+  let error = null
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let streamDestroyed = false
+  a.stream.on('error', function () {
+    t.fail('a stream errored')
+  })
+  a.stream.on('warning', function (err) {
+    t.is(err, error, 'the stream warned the error')
+  })
+  a.stream.on('close', function () {
+    streamDestroyed = true
+  })
+
+  let rejectClose = null
+  const ac = a.createChannel({
+    protocol: 'foo',
+    onclose() {
+      return new Promise((_, reject) => {
+        rejectClose = reject
+      })
+    }
+  })
+  ac.open()
+
+  const bc = b.createChannel({ protocol: 'foo' })
+  bc.open()
+
+  // give the channel a chance to fully open before closing it
+  await new Promise(setImmediate)
+  t.ok(ac.opened, 'a is opened')
+
+  ac.close()
+  error = new Error('boom')
+  rejectClose(error)
+
+  // Allow warning to propagate
+  await new Promise(setImmediate)
+
+  t.absent(streamDestroyed, 'stream was not destroyed after the channel closed')
+})
+
+test('async ondestroy rejecting emits a warning instead of destroying the stream', async function (t) {
+  t.plan(3)
+
+  let error = null
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let streamDestroyed = false
+  a.stream.on('error', function () {
+    t.fail('a stream errored')
+  })
+  a.stream.on('warning', function (err) {
+    t.is(err, error, 'the stream warned the error')
+  })
+  a.stream.on('close', function () {
+    streamDestroyed = true
+  })
+
+  let rejectDestroy = null
+  const ac = a.createChannel({
+    protocol: 'foo',
+    ondestroy() {
+      return new Promise((_, reject) => {
+        rejectDestroy = reject
+      })
+    }
+  })
+  ac.open()
+
+  const bc = b.createChannel({ protocol: 'foo' })
+  bc.open()
+
+  // give the channel a chance to fully open before closing it
+  await new Promise(setImmediate)
+  t.ok(ac.opened, 'a is opened')
+
+  // onclose is a noop here, so `_active` hits 0 synchronously inside `close()`,
+  // which means `_destroy()` (and therefore `ondestroy`) runs immediately
+  ac.close()
+  error = new Error('boom')
+  rejectDestroy(error)
+
+  await new Promise(setImmediate)
+
+  t.absent(streamDestroyed, 'stream was not destroyed after the channel closed')
+})
+
+test.solo('async ondrain rejecting after channel close does not destroy the stream', async function (t) {
+  t.plan(2)
+
+  let error = null
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  let streamDestroyed = false
+  b.stream.on('error', function () {
+    t.fail('b stream errored')
+  })
+  b.stream.on('warning', function (err) {
+    t.is(err, error, 'the stream warned the error')
+  })
+  b.stream.on('close', function () {
+    streamDestroyed = true
+  })
+
+  a.createChannel({
+    protocol: 'foo',
+    messages: [{ encoding: c.string }]
+  }).open()
+
+  let rejectDrain = null
+  let handlerReady = null
+  const drained = new Promise((resolve) => {
+    handlerReady = resolve
+  })
+
+  const bc = b.createChannel({
+    protocol: 'foo',
+    messages: [{ encoding: c.string }],
+    ondrain() {
+      return new Promise((_, reject) => {
+        rejectDrain = reject
+        handlerReady()
+      })
+    }
+  })
+  bc.open()
+
+  // force `bc.messages[0].send()` to return false so a future 'drain' event fires
+  while (bc.messages[0].send('hello world')) {
+    // keep sending until backpressure kicks in
+  }
+
+  await drained
+
+  bc.close()
+  error = new Error('boom')
+  rejectDrain(error)
+
+  await new Promise(setImmediate)
+
+  t.absent(streamDestroyed, 'stream was not destroyed after the channel closed')
+})
+
 function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
