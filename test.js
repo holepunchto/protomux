@@ -933,7 +933,7 @@ test('async ondestroy rejecting emits a warning instead of destroying the stream
   t.absent(streamDestroyed, 'stream was not destroyed after the channel closed')
 })
 
-test.solo('async ondrain rejecting after channel close does not destroy the stream', async function (t) {
+test('async ondrain rejecting after channel close does not destroy the stream', async function (t) {
   t.plan(2)
 
   let error = null
