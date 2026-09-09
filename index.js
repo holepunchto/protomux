@@ -48,7 +48,7 @@ class Channel {
     this._extensions = null
 
     this._decBound = this._dec.bind(this)
-    this._decAndDestroyBound = this._decAndDestroy.bind(this)
+    this._decAndMaybeDestroyBound = this._decAndMaybeDestroy.bind(this)
 
     this._openedPromise = null
     this._openedResolve = null
@@ -119,8 +119,9 @@ class Channel {
     if (--this._active === 0 && this.closed === true) this._destroy()
   }
 
-  _decAndDestroy(err) {
+  _decAndMaybeDestroy(err) {
     this._dec()
+    if (this.closed) return this._mux._warn(err)
     this._mux._safeDestroy(err)
   }
 
@@ -183,7 +184,7 @@ class Channel {
   _track(p) {
     if (isPromise(p) === true) {
       this._active++
-      return p.then(this._decBound, this._decAndDestroyBound)
+      return p.then(this._decBound, this._decAndMaybeDestroyBound)
     }
 
     return null
@@ -817,6 +818,11 @@ module.exports = class Protomux {
     safetyCatch(err)
     this._destroying = true
     this.stream.destroy(err)
+  }
+
+  _warn(err) {
+    safetyCatch(err)
+    this.stream.emit('warning', err)
   }
 
   _shutdown() {
