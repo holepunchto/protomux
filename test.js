@@ -270,6 +270,49 @@ test('mega cork', function (t) {
   }
 })
 
+test('batch msg - wrong length', async function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+
+  const ap = a.createChannel({
+    protocol: 'test'
+  })
+  ap.open()
+
+  const b = new Protomux(new SecretStream(false))
+
+  const bp = b.createChannel({
+    protocol: 'test'
+  })
+  bp.open()
+
+  const b1 = bp.addMessage({ encoding: c.int })
+
+  replicate(a, b)
+
+  b.stream.on('error', (err) => {
+    // IF it gets 'uint must be between 0 and 9007199254740991, use biguint',
+    // then it tried to parse an undefined value. Instead it should detect the
+    // OOB.
+    t.is(err.message, 'Out of bounds', 'expect OOB')
+  })
+
+  const buf = c.encode(c.uint, 1024 ** 2) // big length
+  const badBuf = b4a.from([
+    0x00, // Control session
+    0x00, // type 0 = batch
+    0x01, // remote id
+    ...buf
+  ])
+  a.stream.write(badBuf)
+
+  b1.onmessage = function (message) {
+    t.comment('Unexpected Message', message)
+    t.fail('should not receive a message from ill formed message.')
+  }
+})
+
 test('handshake', function (t) {
   const a = new Protomux(new SecretStream(true))
   const b = new Protomux(new SecretStream(false))

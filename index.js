@@ -652,7 +652,7 @@ module.exports = class Protomux {
         remoteId = c.uint.decode(state)
         continue
       }
-      state.end = state.start + len
+      state.end = Math.min(state.start + len, end)
       // if batch contains more than one message, cork it so we reply back with a batch
       if (end !== state.end && waiting === null) {
         waiting = []
