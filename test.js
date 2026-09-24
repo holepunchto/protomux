@@ -476,7 +476,7 @@ test('deduplicate muxers', function (t) {
   bbar.addMessage({ encoding: c.string }).send('hello bar')
 })
 
-test('open + send + close on same tick', async function (t) {
+test('open + send + close on same tick', function (t) {
   t.plan(4)
 
   const a = new Protomux(new SecretStream(true))
@@ -578,7 +578,7 @@ test('keep alive - one side only', function (t) {
   setTimeout(() => t.pass(), 500)
 })
 
-test('isIdle - basic functionality', async function (t) {
+test('isIdle - basic functionality', function (t) {
   t.plan(8)
 
   const a = new Protomux(new SecretStream(true))
@@ -647,7 +647,7 @@ test('id unslabbed when receiving', async function (t) {
   t.is([...a._infos.values()][0].id.buffer.byteLength, 32, 'unslabbed id when set by yourself')
 })
 
-test('supports setting userData after `.createChannel()` but before `.open()`', async function (t) {
+test('supports setting userData after `.createChannel()` but before `.open()`', function (t) {
   // This test showcases why `_fullyOpenSoon()` queues `_fullyOpen()` to defer it running
   t.plan(1)
   const a = new Protomux(new SecretStream(true))
@@ -664,7 +664,7 @@ test('supports setting userData after `.createChannel()` but before `.open()`', 
 
   p.userData = true
 
-  b.pair({ protocol, id }, async () => {
+  b.pair({ protocol, id }, () => {
     const p2 = b.createChannel({
       protocol,
       id,
