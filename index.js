@@ -151,9 +151,9 @@ class Channel {
     if (remote.pending !== null) this._drain(remote)
     if (this._mux._destroying === true) return
 
-    this._mux._notifyWatchers(this)
     this.opened = true
     this._resolveOpen(true)
+    this._mux._notifyWatchers(this)
   }
 
   _resolveOpen(opened) {
