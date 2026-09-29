@@ -238,6 +238,82 @@ test('unwatch - w/o callback removes all callbacks', async (t) => {
   t.pass('channel created')
 })
 
+test('watch - fires when the local side opened first', async (t) => {
+  t.plan(2)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32, 1)
+
+  // a accepts via pair, so b's channel is fully opened directly by a's open message
+  a.pair({ protocol, id }, () => {
+    a.createChannel({ protocol, id }).open()
+  })
+
+  const bc = b.createChannel({ protocol, id })
+
+  b.watch({ protocol, id }, (channel) => {
+    t.is(channel, bc, 'watcher got the locally opened channel')
+    t.ok(channel.opened, 'channel is marked opened')
+  })
+
+  bc.open()
+})
+
+test('watch - throwing destroys the stream when the local side opened first', async (t) => {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const error = new Error('boom')
+
+  a.pair({ protocol }, () => {
+    a.createChannel({ protocol }).open()
+  })
+  b.watch({ protocol }, () => {
+    throw error
+  })
+
+  const destroyed = new Promise((resolve) => b.stream.once('error', resolve))
+
+  b.createChannel({ protocol }).open()
+
+  t.is(await destroyed, error, 'stream destroyed with the watcher error')
+})
+
+test('watch - throwing destroys the stream when paired', async (t) => {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const error = new Error('boom')
+
+  b.pair({ protocol }, () => {
+    b.createChannel({ protocol }).open()
+  })
+  b.watch({ protocol }, () => {
+    throw error
+  })
+
+  const destroyed = new Promise((resolve) => b.stream.once('error', resolve))
+
+  a.createChannel({ protocol }).open()
+
+  t.is(await destroyed, error, 'stream destroyed with the watcher error')
+})
+
 test('multi message', function (t) {
   const a = new Protomux(new SecretStream(true))
 
