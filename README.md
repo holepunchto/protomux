@@ -112,13 +112,25 @@ If you want multiple sessions with the same `protocol` and `id`, set `unique: fa
 
 Boolean that indicates if the channel is opened.
 
-#### `mux.pair({ protocol, id }, callback)`
+#### `mux.pair({ protocol, id = null }, callback)`
 
 Register a callback to be called everytime a new channel is requested.
 
-#### `mux.unpair({ protocol, id })`
+#### `mux.unpair({ protocol, id = null })`
 
 Unregisters the pair callback.
+
+#### `mux.watch({ protocol, id = null }, callback)`
+
+Register a callback to be called every time a channel for this `protocol` (and `id`, if given) becomes fully open. Unlike `pair`, any number of watchers can be registered for the same `protocol`/`id` - it's purely observational.
+
+If `id` is `null` every channel for the given `protocol` is watched regardless of `id`.
+
+`callback` is called synchronously as `callback(channel)`. Its return value is ignored. Throwing synchronously destroys the stream, the same as a throwing `onopen`.
+
+#### `mux.unwatch({ protocol, id = null }, [callback])`
+
+Unregisters a watcher. Omitting `callback` removes all watchers registered for that `protocol`/`id`.
 
 #### `channel.open([handshake])`
 

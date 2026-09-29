@@ -122,6 +122,122 @@ test('channel opened', async function (t) {
   await t.execution(bp.fullyClosed())
 })
 
+test('watch - multiple observers see the same channel open', function (t) {
+  t.plan(3)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32, 1)
+
+  // the "owning" library pairs and creates the channel as usual
+  b.pair({ protocol, id }, () => {
+    b.createChannel({ protocol, id }).open()
+  })
+
+  // two independent, non-owning observers watch the same protocol/id
+  b.watch({ protocol, id }, (channel) => {
+    t.is(channel.protocol, protocol, 'observer 1 saw the channel open')
+  })
+
+  b.watch({ protocol, id }, (channel) => {
+    t.is(channel.protocol, protocol, 'observer 2 saw the channel open')
+  })
+
+  a.createChannel({
+    protocol,
+    id,
+    onopen() {
+      t.pass('a saw its own channel open')
+    }
+  }).open()
+})
+
+test('watch - id: null matches all id for the protocol', function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const idOne = b4a.alloc(32, 1)
+  const idTwo = b4a.alloc(32, 2)
+  const seen = []
+
+  b.pair({ protocol }, (id) => {
+    b.createChannel({ protocol, id }).open()
+  })
+
+  // Defaults `id` to `null` but set explicitly for clarity
+  b.watch({ protocol, id: null }, (channel) => {
+    seen.push(b4a.toString(channel.id))
+    if (seen.length === 2) {
+      t.alike(seen.sort(), [b4a.toString(idOne), b4a.toString(idTwo)].sort())
+    }
+  })
+
+  a.createChannel({ protocol, id: idOne }).open()
+  a.createChannel({ protocol, id: idTwo }).open()
+})
+
+test('unwatch - removes the given callback', (t) => {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32, 1)
+
+  b.pair({ protocol, id }, () => {
+    b.createChannel({ protocol, id }).open()
+  })
+
+  const shouldNotFire = () => t.fail('unwatched callback should not fire')
+  const shouldFire = () => t.pass('remaining watcher still fires')
+
+  b.watch({ protocol, id }, shouldNotFire)
+  b.watch({ protocol, id }, shouldFire)
+  b.unwatch({ protocol, id }, shouldNotFire)
+
+  a.createChannel({ protocol, id }).open()
+})
+
+test('unwatch - w/o callback removes all callbacks', async (t) => {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32, 1)
+
+  b.pair({ protocol, id }, () => {
+    b.createChannel({ protocol, id }).open()
+  })
+
+  const shouldNotFire = () => t.fail('unwatched callback should not fire')
+
+  b.watch({ protocol, id }, shouldNotFire)
+  b.watch({ protocol, id }, shouldNotFire)
+  b.unwatch({ protocol, id })
+
+  const channel = a.createChannel({ protocol, id })
+  channel.open()
+
+  await channel.fullyOpened()
+  t.pass('channel created')
+})
+
 test('multi message', function (t) {
   const a = new Protomux(new SecretStream(true))
 
