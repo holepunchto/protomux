@@ -314,6 +314,74 @@ test('watch - throwing destroys the stream when paired', async (t) => {
   t.is(await destroyed, error, 'stream destroyed with the watcher error')
 })
 
+test('watch - async rejection while open destroys the stream', async (t) => {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const error = new Error('boom')
+
+  b.pair({ protocol }, () => {
+    b.createChannel({ protocol }).open()
+  })
+  b.watch({ protocol }, async () => {
+    await new Promise((resolve) => setImmediate(resolve))
+    throw error
+  })
+
+  const destroyed = new Promise((resolve) => b.stream.once('error', resolve))
+
+  a.createChannel({ protocol }).open()
+
+  t.is(await destroyed, error, 'stream destroyed with the watcher error')
+})
+
+test('watch - async rejection after channel close emits a warning', async (t) => {
+  t.plan(3)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const error = new Error('boom')
+
+  let reject = null
+  let watched = null
+  const fired = new Promise((resolve) => {
+    watched = resolve
+  })
+
+  b.pair({ protocol }, () => {
+    b.createChannel({ protocol }).open()
+  })
+  b.watch({ protocol }, (channel) => {
+    watched(channel)
+    return new Promise((resolve, _reject) => {
+      reject = _reject
+    })
+  })
+
+  const warned = new Promise((resolve) => b.stream.once('warning', resolve))
+
+  a.createChannel({ protocol }).open()
+
+  const channel = await fired
+  channel.close()
+  t.absent(channel.destroyed, 'channel waits for the pending watcher before destroying')
+
+  reject(error)
+
+  t.is(await warned, error, 'watcher error emitted as a warning')
+  await channel.fullyClosed()
+  t.absent(b.stream.destroyed, 'stream was not destroyed')
+})
+
 test('multi message', function (t) {
   const a = new Protomux(new SecretStream(true))
 

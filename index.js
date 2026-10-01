@@ -859,12 +859,12 @@ module.exports = class Protomux {
 
   _notifyWatchers(session) {
     const watchers = this._watchers.get(toKey(session.protocol, session.id))
-    if (watchers) for (const watch of watchers.slice()) watch(session)
+    if (watchers) for (const watch of watchers.slice()) session._track(watch(session))
 
     if (session.id === null) return
 
     const wildcard = this._watchers.get(toKey(session.protocol, null))
-    if (wildcard) for (const watch of wildcard.slice()) watch(session)
+    if (wildcard) for (const watch of wildcard.slice()) session._track(watch(session))
   }
 
   _shutdown() {
