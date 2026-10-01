@@ -234,8 +234,8 @@ test('unwatch - removes the given callback', (t) => {
   a.createChannel({ protocol, id }).open()
 })
 
-test('unwatch - w/o callback removes all callbacks', async (t) => {
-  t.plan(1)
+test('unwatchAll - removes all callbacks for the protocol/id', async (t) => {
+  t.plan(2)
 
   const a = new Protomux(new SecretStream(true))
   const b = new Protomux(new SecretStream(false))
@@ -253,7 +253,8 @@ test('unwatch - w/o callback removes all callbacks', async (t) => {
 
   b.watch({ protocol, id }, shouldNotFire)
   b.watch({ protocol, id }, shouldNotFire)
-  b.unwatch({ protocol, id })
+  b.watch({ protocol }, () => t.pass('watcher for another protocol/id still fires'))
+  b.unwatchAll({ protocol, id })
 
   const channel = a.createChannel({ protocol, id })
   channel.open()

@@ -128,9 +128,13 @@ If `id` is `null` every channel for the given `protocol` is watched regardless o
 
 `callback` is called as `callback(channel)`. Errors are handled the same as `onopen`: throwing or returning a rejected promise destroys the stream, unless the channel has already closed when the promise rejects, in which case the error is emitted via the `warning` event instead.
 
-#### `mux.unwatch({ protocol, id = null }, [callback])`
+#### `mux.unwatch({ protocol, id = null }, callback)`
 
-Unregisters a watcher. Omitting `callback` removes all watchers registered for that `protocol`/`id`.
+Unregisters a watcher callback for the given `protocol`/`id`.
+
+#### `mux.unwatchAll({ protocol, id = null })`
+
+Unregisters all watcher callbacks for the given `protocol`/`id`.
 
 #### `channel.open([handshake])`
 

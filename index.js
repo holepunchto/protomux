@@ -433,16 +433,15 @@ module.exports = class Protomux {
     const watchers = this._watchers.get(key)
     if (!watchers) return
 
-    if (callback === undefined) {
-      this._watchers.delete(key)
-      return
-    }
-
     const i = watchers.indexOf(callback)
     if (i === -1) return
 
     watchers.splice(i, 1)
     if (watchers.length === 0) this._watchers.delete(key)
+  }
+
+  unwatchAll({ protocol, id = null }) {
+    this._watchers.delete(toKey(protocol, id))
   }
 
   opened({ protocol, id = null }) {
