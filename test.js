@@ -185,6 +185,30 @@ test('watch - id: null matches all id for the protocol', function (t) {
   a.createChannel({ protocol, id: idTwo }).open()
 })
 
+test('watch - undefined callbacks are skipped', (t) => {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const protocol = 'foo'
+  const id = b4a.alloc(32, 1)
+
+  b.pair({ protocol, id }, () => {
+    b.createChannel({ protocol, id }).open()
+  })
+
+  b.stream.on('error', (err) => t.fail('stream errored: ' + err.message))
+
+  b.watch({ protocol, id })
+  b.watch({ protocol })
+  b.watch({ protocol, id }, () => t.pass('defined watcher still fires'))
+
+  a.createChannel({ protocol, id }).open()
+})
+
 test('unwatch - removes the given callback', (t) => {
   t.plan(1)
 
