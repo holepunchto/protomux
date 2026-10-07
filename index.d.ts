@@ -17,7 +17,7 @@ interface ProtomuxOptions {
 /**
  * Options for creating a protocol channel.
  */
-interface ChannelOptions<I = unknown, O = I> {
+interface ChannelOptions<I = unknown, O = I, E extends readonly unknown[] = readonly unknown[]> {
   /** Protocol name used to match channels between peers. */
   protocol: string
   /** Optional binary identifier to distinguish multiple channels with the same protocol name. */
@@ -25,7 +25,7 @@ interface ChannelOptions<I = unknown, O = I> {
   /** Compact-encoding codec for encoding/decoding the handshake value exchanged on open. */
   handshake?: Encoder<I, O> | null
   /** Array of message descriptors registered on channel open. */
-  messages?: (MessageOptions<unknown, unknown> | null)[]
+  messages?: { [K in keyof E]: MessageOptions<E[K]> | null }
   /** When `true`, returns `null` if a channel with this protocol+id is already open. */
   unique?: boolean
   /** Alternative protocol names that also match this channel. */
@@ -45,14 +45,19 @@ interface ChannelOptions<I = unknown, O = I> {
 /**
  * Options for registering a message type on a channel.
  */
-interface MessageOptions<I = Uint8Array, O = I> {
+interface MessageOptions<E = undefined> {
   /** A compact-encoding codec. Defaults to raw binary (`c.raw`). */
-  encoding?: Encoder<I, O>
+  encoding?: E
   /** When `true`, batch replies are collected before the next tick. */
   autoBatch?: boolean
   /** Called with `(message, channel)` when the remote sends a message of this type. */
-  onmessage?(message: O, channel: Channel): void | Promise<void>
+  onmessage?(message: DecodedOf<E>, channel: Channel): void | Promise<void>
 }
+
+/** Value produced by decoding with encoder `E` (`Uint8Array` when no encoding is given). */
+type DecodedOf<E> = E extends Encoder<any, infer O> ? O : Uint8Array
+/** Value accepted when encoding with encoder `E` (`Uint8Array` when no encoding is given). */
+type EncodableOf<E> = E extends Encoder<infer I, any> ? I : Uint8Array
 
 /**
  * Protocol + id selector used by pair/unpair/opened/getLastChannel.
@@ -107,7 +112,9 @@ interface Protomux extends Iterable<Channel> {
    * @param options - Channel creation options.
    * @returns The new channel, or `null` if it cannot be opened.
    */
-  createChannel<I = unknown, O = I>(opts: ChannelOptions<I, O>): Channel<I, O> | null
+  createChannel<I = unknown, O = I, const E extends readonly unknown[] = readonly unknown[]>(
+    opts: ChannelOptions<I, O, E>
+  ): Channel<I, O> | null
   /**
    * Return the most recently opened channel for the given protocol and optional binary id, or `null` if none is open.
    * @param options - Protocol name and optional binary id.
@@ -196,7 +203,9 @@ or `false` if it closes before opening.
    * @param opts - Message options including encoding and onmessage handler.
    * @returns Message object with a `send(data)` method for sending encoded messages.
    */
-  addMessage<MI = Uint8Array, MO = MI>(opts?: MessageOptions<MI, MO> | null): Message<MI, MO>
+  addMessage<const E = undefined>(
+    opts?: MessageOptions<E> | null
+  ): Message<EncodableOf<E>, DecodedOf<E>>
 
   onopen(handshake: O | null, channel: Channel<I, O>): void | Promise<void>
   onclose(isRemote: boolean, channel: Channel<I, O>): void | Promise<void>
