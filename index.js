@@ -153,6 +153,7 @@ class Channel {
 
     this.opened = true
     this._resolveOpen(true)
+    this._mux._notifyWatchers(this)
   }
 
   _resolveOpen(opened) {
@@ -340,6 +341,7 @@ module.exports = class Protomux {
     this._alloc =
       alloc || (typeof stream.alloc === 'function' ? stream.alloc.bind(stream) : b4a.allocUnsafe)
     this._safeDestroyBound = this._safeDestroy.bind(this)
+    this._warnBound = this._warn.bind(this)
     this._uncorkBound = this.uncork.bind(this)
 
     this._remoteBacklog = 0
@@ -353,6 +355,7 @@ module.exports = class Protomux {
 
     this._infos = new Map()
     this._notify = new Map()
+    this._watchers = new Map()
     // stream.destroyed flips asynchronously on streamx-based transports.
     this._destroying = false
 
@@ -411,6 +414,35 @@ module.exports = class Protomux {
 
   unpair({ protocol, id = null }) {
     this._notify.delete(toKey(protocol, id))
+  }
+
+  // Watch channels opening passively
+  watch({ protocol, id = null }, callback) {
+    const key = toKey(protocol, id)
+    let watchers = this._watchers.get(key)
+
+    if (!watchers) {
+      watchers = []
+      this._watchers.set(key, watchers)
+    }
+
+    watchers.push(callback)
+  }
+
+  unwatch({ protocol, id = null }, callback) {
+    const key = toKey(protocol, id)
+    const watchers = this._watchers.get(key)
+    if (!watchers) return
+
+    const i = watchers.indexOf(callback)
+    if (i === -1) return
+
+    watchers.splice(i, 1)
+    if (watchers.length === 0) this._watchers.delete(key)
+  }
+
+  unwatchAll({ protocol, id = null }) {
+    this._watchers.delete(toKey(protocol, id))
   }
 
   opened({ protocol, id = null }) {
@@ -823,6 +855,30 @@ module.exports = class Protomux {
   _warn(err) {
     safetyCatch(err)
     this.stream.emit('warning', err)
+  }
+
+  _notifyWatchers(session) {
+    const watchers = this._watchers.get(toKey(session.protocol, session.id))
+    if (watchers) {
+      for (const watch of watchers.slice()) if (watch) this._callWatcher(watch, session)
+    }
+
+    if (session.id === null) return
+
+    const wildcard = this._watchers.get(toKey(session.protocol, null))
+    if (wildcard) {
+      for (const watch of wildcard.slice()) if (watch) this._callWatcher(watch, session)
+    }
+  }
+
+  // Watchers are passive. Their errors are warnings.
+  _callWatcher(watch, session) {
+    try {
+      const p = watch(session)
+      if (isPromise(p) === true) p.catch(this._warnBound)
+    } catch (err) {
+      this._warn(err)
+    }
   }
 
   _shutdown() {
