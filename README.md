@@ -126,7 +126,7 @@ Register a callback to be called every time a channel for this `protocol` (and `
 
 If `id` is `null` every channel for the given `protocol` is watched regardless of `id`.
 
-`callback` is called as `callback(channel)`. Errors are handled the same as `onopen`: throwing or returning a rejected promise destroys the stream, unless the channel has already closed when the promise rejects, in which case the error is emitted via the `warning` event instead.
+`callback` is called as `callback(channel)`. Watchers are passive and never affect the channel or the stream: throwing or returning a rejected promise emits the error via the `warning` event on the stream.
 
 #### `mux.unwatch({ protocol, id = null }, callback)`
 
