@@ -261,53 +261,13 @@ class Channel {
   addMessage(opts) {
     if (!opts) return this._skipMessage()
 
-    const type = this.messages.length
-    const autoBatch = opts.autoBatch !== false
-    const encoding = opts.encoding || c.raw
-    const onmessage = opts.onmessage || noop
-
-    const s = this
-    const typeLen = encodingLength(c.uint, type)
-
-    const m = {
-      type,
-      autoBatch,
-      encoding,
-      onmessage,
-      recv(state, session) {
-        return session._track(m.onmessage(encoding.decode(state), session))
-      },
-      send(m, session = s) {
-        if (session.closed === true) return false
-
-        const mux = session._mux
-        const state = { buffer: null, start: 0, end: typeLen }
-
-        if (mux._batch !== null) {
-          encoding.preencode(state, m)
-          state.buffer = mux._alloc(state.end)
-
-          c.uint.encode(state, type)
-          encoding.encode(state, m)
-
-          mux._pushBatch(session._localId, state.buffer)
-          return true
-        }
-
-        c.uint.preencode(state, session._localId)
-        encoding.preencode(state, m)
-
-        state.buffer = mux._alloc(state.end)
-
-        c.uint.encode(state, session._localId)
-        c.uint.encode(state, type)
-        encoding.encode(state, m)
-
-        mux.drained = mux.stream.write(state.buffer)
-
-        return mux.drained
-      }
-    }
+    const m = new Message(
+      this,
+      this.messages.length,
+      opts.autoBatch !== false,
+      opts.encoding || c.raw,
+      opts.onmessage || noop
+    )
 
     this.messages.push(m)
 
@@ -326,6 +286,53 @@ class Channel {
 
     this.messages.push(m)
     return m
+  }
+}
+
+// recv and send live on the prototype so a channel's messages cost one object each
+class Message {
+  constructor(channel, type, autoBatch, encoding, onmessage) {
+    this.type = type
+    this.autoBatch = autoBatch
+    this.encoding = encoding
+    this.onmessage = onmessage
+    this._channel = channel
+  }
+
+  recv(state, session) {
+    return session._track(this.onmessage(this.encoding.decode(state), session))
+  }
+
+  send(m, session = this._channel) {
+    if (session.closed === true) return false
+
+    const mux = session._mux
+    const encoding = this.encoding
+    const state = { buffer: null, start: 0, end: uintLength(this.type) }
+
+    if (mux._batch !== null) {
+      encoding.preencode(state, m)
+      state.buffer = mux._alloc(state.end)
+
+      c.uint.encode(state, this.type)
+      encoding.encode(state, m)
+
+      mux._pushBatch(session._localId, state.buffer)
+      return true
+    }
+
+    c.uint.preencode(state, session._localId)
+    encoding.preencode(state, m)
+
+    state.buffer = mux._alloc(state.end)
+
+    c.uint.encode(state, session._localId)
+    c.uint.encode(state, this.type)
+    encoding.encode(state, m)
+
+    mux.drained = mux.stream.write(state.buffer)
+
+    return mux.drained
   }
 }
 
@@ -903,8 +910,7 @@ function isPromise(p) {
   return !!(p && typeof p.then === 'function')
 }
 
-function encodingLength(enc, val) {
-  const state = { buffer: null, start: 0, end: 0 }
-  enc.preencode(state, val)
-  return state.end
+// same as c.uint.preencode
+function uintLength(n) {
+  return n <= 0xfc ? 1 : n <= 0xffff ? 3 : n <= 0xffffffff ? 5 : 9
 }
