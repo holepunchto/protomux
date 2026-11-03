@@ -99,6 +99,7 @@ class KeyTable {
       this.protocols[e] = this.protocols[last]
       this.ids[e] = this.ids[last]
       this.infos[e] = this.infos[last]
+      if (this.infos[e] !== null) moveEntry(this.infos[e], last, e)
       this.notify[e] = this.notify[last]
       this.watchers[e] = this.watchers[last]
     }
@@ -715,7 +716,8 @@ module.exports = class Protomux {
 
     info = {
       protocol,
-      aliases: [],
+      // indices into the key table for the protocol and each alias, kept current as entries move
+      entries: [e],
       id,
       pairing: 0,
       opened: 0,
@@ -726,8 +728,9 @@ module.exports = class Protomux {
     keys.infos[e] = info
 
     for (const alias of aliases) {
-      info.aliases.push(alias)
-      keys.infos[keys.add(alias, id)] = info
+      const a = keys.add(alias, id)
+      info.entries.push(a)
+      keys.infos[a] = info
     }
 
     return info
@@ -735,17 +738,15 @@ module.exports = class Protomux {
 
   _gc(info) {
     if (info.opened === 0 && info.outgoing.length === 0 && info.incoming.length === 0) {
-      this._clearInfo(info.protocol, info.id)
-
-      for (const alias of info.aliases) this._clearInfo(alias, info.id)
+      // gc of one entry can move another of this info's entries into its place, updating info.entries
+      for (let i = 0; i < info.entries.length; i++) {
+        const e = info.entries[i]
+        if (e === -1 || this._keys.infos[e] !== info) continue
+        info.entries[i] = -1
+        this._keys.infos[e] = null
+        this._keys.gc(e)
+      }
     }
-  }
-
-  _clearInfo(protocol, id) {
-    const e = this._keys.find(protocol, id)
-    if (e === -1) return
-    this._keys.infos[e] = null
-    this._keys.gc(e)
   }
 
   _ondata(buffer) {
@@ -1064,6 +1065,12 @@ module.exports = class Protomux {
 }
 
 function noop() {}
+
+function moveEntry(info, from, to) {
+  for (let i = 0; i < info.entries.length; i++) {
+    if (info.entries[i] === from) info.entries[i] = to
+  }
+}
 
 // seeded FNV-1a over the protocol and id bytes, murmur3 finalizer
 function hashKey(protocol, id) {

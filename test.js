@@ -1426,3 +1426,45 @@ test('key table matches a reference map under churn', function (t) {
   t.is(mux._keys.size, 0, 'all entries dropped')
   t.is(mux._keys.slots.length, 16, 'table shrank back')
 })
+
+test('key table tracks aliased channels through random open and close', function (t) {
+  const mux = new Protomux(new SecretStream(true))
+  const rand = (n) => Math.floor(Math.random() * n)
+
+  const ids = []
+  for (let i = 0; i < 200; i++) ids.push(b4a.from([i, 0, 0, 0]))
+
+  const open = new Map()
+  let ok = true
+
+  for (let op = 0; op < 5000; op++) {
+    const i = rand(ids.length)
+    const ch = open.get(i)
+
+    if (ch) {
+      ch.close()
+      open.delete(i)
+    } else {
+      const c = mux.createChannel({ protocol: 'p', aliases: ['q', 'r'], id: ids[i] })
+      c.open()
+      open.set(i, c)
+    }
+
+    if (op % 250 !== 0) continue
+
+    for (let j = 0; j < ids.length; j++) {
+      const expected = open.has(j)
+      if (mux.opened({ protocol: 'p', id: ids[j] }) !== expected) ok = false
+      if (mux.opened({ protocol: 'q', id: ids[j] }) !== expected) ok = false
+      if (mux.opened({ protocol: 'r', id: ids[j] }) !== expected) ok = false
+    }
+  }
+
+  t.ok(ok, 'opened() matches for the protocol and every alias')
+
+  for (const ch of open.values()) ch.close()
+
+  let closed = true
+  for (const id of ids) if (mux.opened({ protocol: 'q', id })) closed = false
+  t.ok(closed, 'nothing reported open after close')
+})
