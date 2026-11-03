@@ -85,12 +85,20 @@ class Channel {
   }
 
   open(handshake) {
-    const id = this._mux._free.length > 0 ? this._mux._free.pop() : this._mux._local.push(null) - 1
+    const mux = this._mux
+    let id = 0
+    if (mux._free.length > 0) {
+      id = mux._free.pop()
+    } else {
+      id = mux._local.push(null) - 1
+      mux._localInfo.push(null)
+    }
 
     this._info.opened++
     this._info.lastChannel = this
     this._localId = id + 1
     this._mux._local[id] = this
+    this._mux._localInfo[id] = this._info
 
     if (this._remoteId === 0) {
       this._info.outgoing.push(this._localId)
@@ -203,7 +211,7 @@ class Channel {
       this._remoteId = 0
       // If remote has acked, we can reuse the local id now
       // otherwise, we need to wait for the "ack" to arrive
-      this._mux._free.push(this._localId - 1)
+      this._mux._freeLocal(this._localId - 1)
     }
 
     this._mux._local[this._localId - 1] = null
@@ -349,6 +357,8 @@ module.exports = class Protomux {
     this._paused = false
     this._remote = []
     this._local = []
+    // info each local id was opened under, held until the id is freed (after the remote acks or rejects)
+    this._localInfo = []
     this._free = []
     this._batch = null
     this._batchState = null
@@ -732,7 +742,7 @@ module.exports = class Protomux {
 
       if (session === null) {
         // we already closed the channel - ignore
-        this._free.push(localId - 1)
+        this._freeLocal(localId - 1)
         return null
       }
 
@@ -759,23 +769,23 @@ module.exports = class Protomux {
   _onrejectsession(state) {
     const localId = c.uint.decode(state)
 
-    // TODO: can be done smarter...
-    for (const info of this._infos.values()) {
-      const i = info.outgoing.indexOf(localId)
-      if (i === -1) continue
+    const info = localId > 0 && localId <= this._local.length ? this._localInfo[localId - 1] : null
+    const i = info === null ? -1 : info.outgoing.indexOf(localId)
+    if (i === -1) throw new Error('Invalid reject message')
 
-      info.outgoing.splice(i, 1)
+    info.outgoing.splice(i, 1)
 
-      const session = this._local[localId - 1]
+    const session = this._local[localId - 1]
 
-      this._free.push(localId - 1)
-      if (session !== null) session._close(true)
+    this._freeLocal(localId - 1)
+    if (session !== null) session._close(true)
 
-      this._gc(info)
-      return
-    }
+    this._gc(info)
+  }
 
-    throw new Error('Invalid reject message')
+  _freeLocal(id) {
+    this._localInfo[id] = null
+    this._free.push(id)
   }
 
   _onclosesession(state) {
