@@ -592,7 +592,7 @@ module.exports = class Protomux {
     if (buffer.byteLength === 0) return // ignore empty frames...
     try {
       const state = { buffer, start: 0, end: buffer.byteLength }
-      this._decode(c.uint.decode(state), state)
+      this._decode(c.uint.decode(state), state, false)
     } catch (err) {
       this._safeDestroy(err)
     }
