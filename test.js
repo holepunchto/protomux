@@ -1378,3 +1378,38 @@ test('async ondrain rejecting after channel close does not destroy the stream', 
 function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
+
+test('rejects close only their own channel while others stay open', async function (t) {
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  const ids = []
+  for (let i = 0; i < 20; i++) ids.push(b4a.from([i]))
+
+  // b only has the even ids
+  for (let i = 0; i < ids.length; i += 2) {
+    const id = ids[i]
+    b.pair({ protocol: 'foo', id }, function () {
+      b.createChannel({ protocol: 'foo', id }).open()
+    })
+  }
+
+  const results = await Promise.all(
+    ids.map((id) => {
+      const ch = a.createChannel({ protocol: 'foo', id })
+      ch.open()
+      return ch.fullyOpened()
+    })
+  )
+
+  t.alike(
+    results,
+    ids.map((id, i) => i % 2 === 0),
+    'even ids opened, odd ids rejected'
+  )
+  for (let i = 0; i < ids.length; i++) {
+    t.is(a.opened({ protocol: 'foo', id: ids[i] }), i % 2 === 0)
+  }
+})
