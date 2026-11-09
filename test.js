@@ -981,9 +981,9 @@ test('id unslabbed when receiving', async function (t) {
 
   await new Promise((resolve) => setImmediate(resolve))
 
-  t.is([...b._infos.values()][0].id.buffer.byteLength, 32, 'unslabbed id when received from remote')
+  t.is(b._getInfo(protocol, id).id.buffer.byteLength, 32, 'unslabbed id when received from remote')
 
-  t.is([...a._infos.values()][0].id.buffer.byteLength, 32, 'unslabbed id when set by yourself')
+  t.is(a._getInfo(protocol, id).id.buffer.byteLength, 32, 'unslabbed id when set by yourself')
 })
 
 test('supports setting userData after `.createChannel()` but before `.open()`', async function (t) {
@@ -1378,3 +1378,115 @@ test('async ondrain rejecting after channel close does not destroy the stream', 
 function replicate(a, b) {
   a.stream.rawStream.pipe(b.stream.rawStream).pipe(a.stream.rawStream)
 }
+
+test('key table matches a reference map under churn', function (t) {
+  const mux = new Protomux(new SecretStream(true))
+
+  const protocols = ['a', 'b', 'ab', 'hypercore/alpha']
+  const ids = [null, b4a.alloc(0)]
+  for (let i = 0; i < 300; i++) ids.push(b4a.from([i & 0xff, i >> 8, 0, 0]))
+
+  const notify = new Map()
+  const watchers = new Map()
+  const toKey = (p, id) => p + '/' + (id ? b4a.toString(id, 'hex') : '')
+  const rand = (n) => Math.floor(Math.random() * n)
+
+  let ok = true
+  for (let op = 0; op < 20000; op++) {
+    const protocol = protocols[rand(protocols.length)]
+    const id = ids[rand(ids.length)]
+    const key = toKey(protocol, id)
+
+    switch (rand(4)) {
+      case 0: {
+        const fn = () => {}
+        mux.pair({ protocol, id }, fn)
+        notify.set(key, fn)
+        break
+      }
+      case 1:
+        mux.unpair({ protocol, id })
+        notify.delete(key)
+        break
+      case 2: {
+        const fn = () => {}
+        mux.watch({ protocol, id }, fn)
+        if (!watchers.has(key)) watchers.set(key, [])
+        watchers.get(key).push(fn)
+        break
+      }
+      case 3:
+        mux.unwatchAll({ protocol, id })
+        watchers.delete(key)
+        break
+    }
+
+    if (op % 500 !== 0) continue
+
+    const live = new Set([...notify.keys(), ...watchers.keys()])
+    if (mux._keys.size !== live.size) ok = false
+
+    for (const p of protocols) {
+      for (const id of ids) {
+        const k = toKey(p, id)
+        if (mux._getNotify(p, id) !== (notify.get(k) || null)) ok = false
+        const w = mux._getWatchers(p, id)
+        const expected = watchers.get(k) || null
+        if (w !== expected && !(w && expected && w.length === expected.length)) ok = false
+      }
+    }
+  }
+
+  for (const p of protocols) {
+    for (const id of ids) {
+      mux.unpair({ protocol: p, id })
+      mux.unwatchAll({ protocol: p, id })
+    }
+  }
+
+  t.ok(ok, 'lookups match the reference after every checkpoint')
+  t.is(mux._keys.size, 0, 'all entries dropped')
+  t.is(mux._keys.slots.length, 16, 'table shrank back')
+})
+
+test('key table tracks aliased channels through random open and close', function (t) {
+  const mux = new Protomux(new SecretStream(true))
+  const rand = (n) => Math.floor(Math.random() * n)
+
+  const ids = []
+  for (let i = 0; i < 200; i++) ids.push(b4a.from([i, 0, 0, 0]))
+
+  const open = new Map()
+  let ok = true
+
+  for (let op = 0; op < 5000; op++) {
+    const i = rand(ids.length)
+    const ch = open.get(i)
+
+    if (ch) {
+      ch.close()
+      open.delete(i)
+    } else {
+      const c = mux.createChannel({ protocol: 'p', aliases: ['q', 'r'], id: ids[i] })
+      c.open()
+      open.set(i, c)
+    }
+
+    if (op % 250 !== 0) continue
+
+    for (let j = 0; j < ids.length; j++) {
+      const expected = open.has(j)
+      if (mux.opened({ protocol: 'p', id: ids[j] }) !== expected) ok = false
+      if (mux.opened({ protocol: 'q', id: ids[j] }) !== expected) ok = false
+      if (mux.opened({ protocol: 'r', id: ids[j] }) !== expected) ok = false
+    }
+  }
+
+  t.ok(ok, 'opened() matches for the protocol and every alias')
+
+  for (const ch of open.values()) ch.close()
+
+  let closed = true
+  for (const id of ids) if (mux.opened({ protocol: 'q', id })) closed = false
+  t.ok(closed, 'nothing reported open after close')
+})

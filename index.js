@@ -8,6 +8,151 @@ const MAX_BUFFERED = 32768
 const MAX_BACKLOG = Infinity // TODO: impl "open" backpressure
 const MAX_BATCH = 8 * 1024 * 1024
 
+// slot = upper 8 bits of the key hash | (entry index + 1)
+const SLOT_TAG = 0xff000000
+const SLOT_INDEX = 0x00ffffff
+const HASH_SEED = (Math.random() * 0x100000000) >>> 0
+
+// Every (protocol, id) the mux knows about: channel info, pair() notify and watchers.
+// Open addressing with linear probing over dense parallel arrays, no string keys.
+class KeyTable {
+  constructor() {
+    this.slots = new Uint32Array(16)
+    this.mask = 15
+    this.size = 0
+    this.hashes = new Uint32Array(8)
+    this.protocols = []
+    this.ids = []
+    this.infos = []
+    this.notify = []
+    this.watchers = []
+  }
+
+  find(protocol, id) {
+    const h = hashKey(protocol, id)
+
+    for (let i = h & this.mask; ; i = (i + 1) & this.mask) {
+      const s = this.slots[i]
+      if (s === 0) return -1
+      const e = (s & SLOT_INDEX) - 1
+      if (
+        ((s ^ h) & SLOT_TAG) === 0 &&
+        this.protocols[e] === protocol &&
+        idEquals(this.ids[e], id)
+      ) {
+        return e
+      }
+    }
+  }
+
+  add(protocol, id) {
+    const h = hashKey(protocol, id)
+
+    let i = h & this.mask
+    for (; ; i = (i + 1) & this.mask) {
+      const s = this.slots[i]
+      if (s === 0) break
+      const e = (s & SLOT_INDEX) - 1
+      if (
+        ((s ^ h) & SLOT_TAG) === 0 &&
+        this.protocols[e] === protocol &&
+        idEquals(this.ids[e], id)
+      ) {
+        return e
+      }
+    }
+
+    const e = this.size++
+    if (e === SLOT_INDEX) throw new Error('Too many channel keys')
+
+    if (e === this.hashes.length) {
+      const hashes = new Uint32Array(e * 2)
+      hashes.set(this.hashes)
+      this.hashes = hashes
+    }
+
+    this.hashes[e] = h
+    this.protocols.push(protocol)
+    this.ids.push(id)
+    this.infos.push(null)
+    this.notify.push(null)
+    this.watchers.push(null)
+
+    if (this.size * 2 > this.slots.length) this._resize(this.slots.length * 2)
+    else this.slots[i] = ((h & SLOT_TAG) | (e + 1)) >>> 0
+
+    return e
+  }
+
+  // drop the entry once nothing refers to its key anymore
+  gc(e) {
+    if (this.infos[e] !== null || this.notify[e] !== null || this.watchers[e] !== null) return
+
+    const last = this.size - 1
+
+    this._unslot(this._slotOf(e))
+
+    if (e !== last) {
+      const h = this.hashes[last]
+      this.slots[this._slotOf(last)] = ((h & SLOT_TAG) | (e + 1)) >>> 0
+      this.hashes[e] = h
+      this.protocols[e] = this.protocols[last]
+      this.ids[e] = this.ids[last]
+      this.infos[e] = this.infos[last]
+      if (this.infos[e] !== null) moveEntry(this.infos[e], last, e)
+      this.notify[e] = this.notify[last]
+      this.watchers[e] = this.watchers[last]
+    }
+
+    this.size = last
+    this.protocols.pop()
+    this.ids.pop()
+    this.infos.pop()
+    this.notify.pop()
+    this.watchers.pop()
+
+    if (this.slots.length > 16 && this.size * 8 < this.slots.length) {
+      this._resize(this.slots.length / 2)
+    }
+  }
+
+  _slotOf(e) {
+    for (let i = this.hashes[e] & this.mask; ; i = (i + 1) & this.mask) {
+      if ((this.slots[i] & SLOT_INDEX) === e + 1) return i
+    }
+  }
+
+  // backward shift deletion, keeps probe chains intact without tombstones
+  _unslot(i) {
+    const slots = this.slots
+    const mask = this.mask
+
+    for (let j = (i + 1) & mask; slots[j] !== 0; j = (j + 1) & mask) {
+      const home = this.hashes[(slots[j] & SLOT_INDEX) - 1] & mask
+      if (i <= j ? i < home && home <= j : i < home || home <= j) continue
+      slots[i] = slots[j]
+      i = j
+    }
+
+    slots[i] = 0
+  }
+
+  _resize(length) {
+    const slots = new Uint32Array(length)
+    const mask = length - 1
+
+    for (let e = 0; e < this.size; e++) {
+      const h = this.hashes[e]
+      let i = h & mask
+      while (slots[i] !== 0) i = (i + 1) & mask
+      slots[i] = ((h & SLOT_TAG) | (e + 1)) >>> 0
+    }
+
+    this.slots = slots
+    this.mask = mask
+  }
+}
+
 class Channel {
   constructor(
     mux,
@@ -353,9 +498,7 @@ module.exports = class Protomux {
     this._batch = null
     this._batchState = null
 
-    this._infos = new Map()
-    this._notify = new Map()
-    this._watchers = new Map()
+    this._keys = new KeyTable()
     // stream.destroyed flips asynchronously on streamx-based transports.
     this._destroying = false
 
@@ -402,52 +545,60 @@ module.exports = class Protomux {
   }
 
   getLastChannel({ protocol, id = null }) {
-    const key = toKey(protocol, id)
-    const info = this._infos.get(key)
+    const info = this._getInfo(protocol, id)
     if (info) return info.lastChannel
     return null
   }
 
   pair({ protocol, id = null }, notify) {
-    this._notify.set(toKey(protocol, id), notify)
+    this._keys.notify[this._keys.add(protocol, id)] = notify || null
   }
 
   unpair({ protocol, id = null }) {
-    this._notify.delete(toKey(protocol, id))
+    const e = this._keys.find(protocol, id)
+    if (e === -1) return
+    this._keys.notify[e] = null
+    this._keys.gc(e)
   }
 
   // Watch channels opening passively
   watch({ protocol, id = null }, callback) {
-    const key = toKey(protocol, id)
-    let watchers = this._watchers.get(key)
+    const e = this._keys.add(protocol, id)
+    let watchers = this._keys.watchers[e]
 
     if (!watchers) {
       watchers = []
-      this._watchers.set(key, watchers)
+      this._keys.watchers[e] = watchers
     }
 
     watchers.push(callback)
   }
 
   unwatch({ protocol, id = null }, callback) {
-    const key = toKey(protocol, id)
-    const watchers = this._watchers.get(key)
+    const e = this._keys.find(protocol, id)
+    if (e === -1) return
+    const watchers = this._keys.watchers[e]
     if (!watchers) return
 
     const i = watchers.indexOf(callback)
     if (i === -1) return
 
     watchers.splice(i, 1)
-    if (watchers.length === 0) this._watchers.delete(key)
+    if (watchers.length === 0) {
+      this._keys.watchers[e] = null
+      this._keys.gc(e)
+    }
   }
 
   unwatchAll({ protocol, id = null }) {
-    this._watchers.delete(toKey(protocol, id))
+    const e = this._keys.find(protocol, id)
+    if (e === -1) return
+    this._keys.watchers[e] = null
+    this._keys.gc(e)
   }
 
   opened({ protocol, id = null }) {
-    const key = toKey(protocol, id)
-    const info = this._infos.get(key)
+    const info = this._getInfo(protocol, id)
     return info ? info.opened > 0 : false
   }
 
@@ -551,16 +702,22 @@ module.exports = class Protomux {
     this.drained = this.stream.write(state.buffer)
   }
 
-  _get(protocol, id, aliases = []) {
-    const key = toKey(protocol, id)
+  _getInfo(protocol, id) {
+    const e = this._keys.find(protocol, id)
+    return e === -1 ? null : this._keys.infos[e]
+  }
 
-    let info = this._infos.get(key)
-    if (info) return info
+  _get(protocol, id, aliases = []) {
+    const keys = this._keys
+    const e = keys.add(protocol, id)
+
+    let info = keys.infos[e]
+    if (info !== null) return info
 
     info = {
-      key,
       protocol,
-      aliases: [],
+      // indices into the key table for the protocol and each alias, kept current as entries move
+      entries: [e],
       id,
       pairing: 0,
       opened: 0,
@@ -568,13 +725,12 @@ module.exports = class Protomux {
       outgoing: [],
       lastChannel: null
     }
-    this._infos.set(key, info)
+    keys.infos[e] = info
 
     for (const alias of aliases) {
-      const key = toKey(alias, id)
-      info.aliases.push(key)
-
-      this._infos.set(key, info)
+      const a = keys.add(alias, id)
+      info.entries.push(a)
+      keys.infos[a] = info
     }
 
     return info
@@ -582,9 +738,14 @@ module.exports = class Protomux {
 
   _gc(info) {
     if (info.opened === 0 && info.outgoing.length === 0 && info.incoming.length === 0) {
-      this._infos.delete(info.key)
-
-      for (const alias of info.aliases) this._infos.delete(alias)
+      // gc of one entry can move another of this info's entries into its place, updating info.entries
+      for (let i = 0; i < info.entries.length; i++) {
+        const e = info.entries[i]
+        if (e === -1 || this._keys.infos[e] !== info) continue
+        info.entries[i] = -1
+        this._keys.infos[e] = null
+        this._keys.gc(e)
+      }
     }
   }
 
@@ -761,7 +922,10 @@ module.exports = class Protomux {
     const localId = c.uint.decode(state)
 
     // TODO: can be done smarter...
-    for (const info of this._infos.values()) {
+    const keys = this._keys
+    for (let e = 0; e < keys.size; e++) {
+      const info = keys.infos[e]
+      if (info === null) continue
       const i = info.outgoing.indexOf(localId)
       if (i === -1) continue
 
@@ -793,7 +957,7 @@ module.exports = class Protomux {
   }
 
   async _requestSession(protocol, id, info) {
-    const notify = this._notify.get(toKey(protocol, id)) || this._notify.get(toKey(protocol, null))
+    const notify = this._getNotify(protocol, id) || this._getNotify(protocol, null)
 
     if (notify) await notify(id)
 
@@ -804,6 +968,11 @@ module.exports = class Protomux {
     }
 
     this._gc(info)
+  }
+
+  _getNotify(protocol, id) {
+    const e = this._keys.find(protocol, id)
+    return e === -1 ? null : this._keys.notify[e]
   }
 
   _rejectSession(info, remoteId) {
@@ -859,17 +1028,23 @@ module.exports = class Protomux {
   }
 
   _notifyWatchers(session) {
-    const watchers = this._watchers.get(toKey(session.protocol, session.id))
+    const watchers = this._getWatchers(session.protocol, session.id)
     if (watchers) {
       for (const watch of watchers.slice()) if (watch) this._callWatcher(watch, session)
     }
 
     if (session.id === null) return
 
-    const wildcard = this._watchers.get(toKey(session.protocol, null))
+    const wildcard = this._getWatchers(session.protocol, null)
     if (wildcard) {
       for (const watch of wildcard.slice()) if (watch) this._callWatcher(watch, session)
     }
+  }
+
+  _getWatchers(protocol, id) {
+    if (this._keys.size === 0) return null
+    const e = this._keys.find(protocol, id)
+    return e === -1 ? null : this._keys.watchers[e]
   }
 
   // Watchers are passive. Their errors are warnings.
@@ -892,8 +1067,41 @@ module.exports = class Protomux {
 
 function noop() {}
 
-function toKey(protocol, id) {
-  return protocol + '##' + (id ? b4a.toString(id, 'hex') : '')
+function moveEntry(info, from, to) {
+  for (let i = 0; i < info.entries.length; i++) {
+    if (info.entries[i] === from) info.entries[i] = to
+  }
+}
+
+// seeded FNV-1a over the protocol and id bytes, murmur3 finalizer
+function hashKey(protocol, id) {
+  let h = HASH_SEED
+
+  for (let i = 0; i < protocol.length; i++) {
+    h = Math.imul(h ^ protocol.charCodeAt(i), 0x01000193)
+  }
+
+  h = Math.imul(h ^ protocol.length, 0x01000193)
+
+  if (id !== null) {
+    for (let i = 0; i < id.byteLength; i++) h = Math.imul(h ^ id[i], 0x01000193)
+  }
+
+  h ^= h >>> 16
+  h = Math.imul(h, 0x85ebca6b)
+  h ^= h >>> 13
+  h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+
+  return h >>> 0
+}
+
+// null and an empty id name the same key
+function idEquals(a, b) {
+  const len = a === null ? 0 : a.byteLength
+  if (len !== (b === null ? 0 : b.byteLength)) return false
+  for (let i = 0; i < len; i++) if (a[i] !== b[i]) return false
+  return true
 }
 
 function byteSize(state) {
