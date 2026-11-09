@@ -630,6 +630,28 @@ test('batch msg - wrong length', async function (t) {
   }
 })
 
+test('batch msg - nested batch', function (t) {
+  t.plan(1)
+
+  const a = new Protomux(new SecretStream(true))
+  const b = new Protomux(new SecretStream(false))
+
+  replicate(a, b)
+
+  b.stream.on('error', (err) => {
+    t.is(err.message, 'Invalid nested batch')
+  })
+
+  const batch = b4a.from([
+    0x00, // type 0 = batch
+    0x00, // remote id 0 = control session
+    ...c.encode(c.uint, 0xffffffff) // length, capped at the end of the outer batch
+  ])
+
+  // control session, then batches that each contain the next one
+  a.stream.write(b4a.concat([b4a.from([0x00]), ...new Array(2).fill(batch)]))
+})
+
 test('handshake', function (t) {
   const a = new Protomux(new SecretStream(true))
   const b = new Protomux(new SecretStream(false))

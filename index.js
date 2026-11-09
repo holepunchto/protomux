@@ -592,7 +592,7 @@ module.exports = class Protomux {
     if (buffer.byteLength === 0) return // ignore empty frames...
     try {
       const state = { buffer, start: 0, end: buffer.byteLength }
-      this._decode(c.uint.decode(state), state)
+      this._decode(c.uint.decode(state), state, false)
     } catch (err) {
       this._safeDestroy(err)
     }
@@ -611,11 +611,11 @@ module.exports = class Protomux {
     this.stream.end()
   }
 
-  _decode(remoteId, state) {
+  _decode(remoteId, state, batched) {
     const type = c.uint.decode(state)
 
     if (remoteId === 0) {
-      return this._oncontrolsession(type, state)
+      return this._oncontrolsession(type, state, batched)
     }
 
     const r = remoteId <= this._remote.length ? this._remote[remoteId - 1] : null
@@ -631,9 +631,10 @@ module.exports = class Protomux {
     return r.session._recv(type, state)
   }
 
-  _oncontrolsession(type, state) {
+  _oncontrolsession(type, state, batched) {
     switch (type) {
       case 0:
+        if (batched === true) throw new Error('Invalid nested batch')
         this._onbatch(state)
         break
 
@@ -690,7 +691,7 @@ module.exports = class Protomux {
         waiting = []
         this.cork()
       }
-      const p = this._decode(remoteId, state)
+      const p = this._decode(remoteId, state, true)
       if (waiting !== null && p !== null) waiting.push(p)
       state.start = state.end
       state.end = end
